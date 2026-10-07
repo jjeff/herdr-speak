@@ -284,7 +284,7 @@ def speak(text, cfg):
         log("(skipped)")
     elif rc != 0:
         log(f"speech command exited with {rc}")
-        if sys.platform == "darwin":
+        if sys.platform == "darwin" and not cfg.get("say_command"):
             # Most often: a Premium or Siri voice without Full Disk Access.
             log("Premium and Siri voices need Full Disk Access for Herdr's terminal app; see the README")
 

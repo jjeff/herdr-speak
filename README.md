@@ -103,6 +103,18 @@ These Herdr actions control the Speaker. Run each with `herdr plugin action invo
 
 Antigravity, Gemini CLI, and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
 
+### Customize the recaps
+
+The toggle gives the agent default rules: one line, at most two short sentences, plain spoken English. Your own instructions win over them. Put lasting rules in the file your agent reads for instructions, such as `AGENTS.md` or `CLAUDE.md`:
+
+```md
+When speech mode is on, keep the 🔊 recap under ten words and always end with the next step.
+```
+
+For one session, add the rule after the toggle where the agent passes arguments, as in `/speak on, recap in French`.
+
+You can change length, tone, language, and content. Keep the recap on one line that starts with 🔊, because the Speaker reads only that line.
+
 ## Other agents
 
 The Speaker works with any agent Herdr detects (`herdr agent start --help` lists the kinds). The agent only needs a way to load the toggle in `skills/speak/SKILL.md`. To add one that isn't in the install table:
@@ -146,6 +158,14 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 **Voices on macOS.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
 
 **Other voices and platforms.** On Windows the Speaker uses the default voice from Settings → Time & language → Speech. On Linux it uses the first of `spd-say`, `espeak-ng`, or `espeak` it finds. To use anything else, such as Piper or a local OpenAI-compatible speech server, point `say_command` at it. For example, `["espeak-ng", "-v", "en-gb", "{text}"]` picks a British espeak voice.
+
+**OpenAI-compatible speech servers.** This macOS `say_command` sends the recap to a server's `/v1/audio/speech` endpoint and plays the result. The URL is [VoiceStudio](https://voicestudio.sh/)'s default. Change it for another server, and add `"voice"` or `"model"` to the JSON to pick a voice or engine. On Linux, replace `afplay` with `aplay` or `paplay`.
+
+```json
+"say_command": ["sh", "-c", "f=\"${TMPDIR:-/tmp}/herdr-speak.wav\"; python3 -c 'import json, sys; print(json.dumps({\"input\": sys.stdin.read(), \"response_format\": \"wav\"}))' | curl -sf http://127.0.0.1:3900/v1/audio/speech -H 'Content-Type: application/json' -d @- -o \"$f\" && exec afplay \"$f\""]
+```
+
+Recaps start once the server finishes generating the audio, a few seconds with VoiceStudio. When the server isn't running, recaps are silent and the log shows `speech command exited with 22`.
 
 **Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then quit and restart Herdr. The Speaker inherits Herdr's access, and only processes started after the grant get it. The built-in compact voices work without it.
 

@@ -13,6 +13,8 @@ Otherwise: speech mode is now ON for the rest of this session. A tool on the use
 
 🔊 <spoken recap>
 
+If the user's own instructions (AGENTS.md, CLAUDE.md, memory, or text after the toggle) say how to write the recap, such as its length, tone, language, or content, follow them over the rules below. The recap stays one line starting with 🔊, because the tool reads only that line.
+
 Rules for the recap:
 - One line, no line breaks, at most two short sentences (about 35 words).
 - Plain spoken English. No markdown, code, file paths, URLs, symbols, or numbers that would sound bad read aloud. Say "the config file", not `~/.config/app/settings.json`.
