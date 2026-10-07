@@ -1,6 +1,6 @@
 # herdr-speak
 
-Hear a short spoken recap when a coding agent (Claude Code, Codex, Gemini CLI, OpenCode, pi, or Hermes) finishes a turn, even when that session runs on another machine you reach through [Herdr](https://herdr.dev).
+Hear a short spoken recap when a coding agent (Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, or Hermes) finishes a turn, even when that session runs on another machine you reach through [Herdr](https://herdr.dev).
 
 herdr-speak has two halves, and both live in this repo:
 
@@ -27,7 +27,7 @@ herdr-speak has two halves, and both live in this repo:
 
 - macOS on the machine where you listen (`say` and `python3` ship with it).
 - Herdr 0.9.3 or newer on every machine.
-- A supported agent on every machine that runs sessions: Claude Code, Codex, Gemini CLI, OpenCode, pi, or Hermes.
+- A supported agent on every machine that runs sessions: Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, or Hermes.
 
 ## Install
 
@@ -43,7 +43,8 @@ herdr plugin install jjeff/herdr-speak
 |---|---|---|
 | Claude Code | `claude plugin marketplace add jjeff/herdr-speak`<br>`claude plugin install herdr-speak@herdr-speak` | `/speak` |
 | Codex | `codex plugin marketplace add jjeff/herdr-speak`<br>`codex plugin add herdr-speak@herdr-speak` | `$herdr-speak:speak` |
-| Gemini CLI | `gemini extensions install https://github.com/jjeff/herdr-speak` | `/speak` |
+| Antigravity (`agy`) | `git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak`<br>`agy plugin install ~/.herdr-speak` | `/speak` |
+| Gemini CLI (enterprise and API-key accounts) | `gemini extensions install https://github.com/jjeff/herdr-speak` | `/speak` |
 | OpenCode | `git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak`<br>`ln -s ~/.herdr-speak/skills/speak ~/.config/opencode/skills/speak` | `/speak` |
 | pi | `pi install git:github.com/jjeff/herdr-speak` | `/skill:speak` |
 | Hermes | `hermes skills install jjeff/herdr-speak/skills/speak` | `/speak` |
@@ -72,7 +73,7 @@ description = "start speaker"
 
 In any agent session, run the toggle from the table above (in Claude Code its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Add `off` to stop.
 
-Gemini CLI and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
+Antigravity, Gemini CLI, and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
 
 ## Configure
 
@@ -112,6 +113,7 @@ herdr plugin link .
 claude plugin marketplace add ./
 claude plugin install herdr-speak@herdr-speak
 codex plugin marketplace add ./
+agy plugin install "$PWD"
 gemini extensions link .
 ln -s "$PWD/skills/speak" ~/.config/opencode/skills/speak
 pi install ./
