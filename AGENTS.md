@@ -21,6 +21,8 @@ Test a host end to end through Herdr, with the Speaker running on Local:
 
 1. `herdr tab create --workspace <ws> --cwd <trusted dir> --no-focus` — use a directory the agent already trusts; a trust prompt blocks startup.
 2. `herdr agent start t --kind <kind> --pane <pane>`
-3. `herdr agent prompt <pane> "<text>" --wait --until done --until idle` — first turn on the toggle, then send a normal prompt.
+3. `herdr agent prompt <pane> "<text>" --wait --until done --until idle` — first turn on the toggle, then send a normal prompt. Wait longer than the Speaker's poll interval (2 s) between prompts, or it only speaks the later recap.
 4. `herdr pane read <speaker pane>` and confirm the Speaker logged the recap.
 5. Close the test tab.
+
+Some hosts need a model flag after `--`, for example `herdr agent start t --kind opencode --pane <p> -- --model <provider/model>`.

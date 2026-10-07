@@ -25,6 +25,8 @@ class ExtractRecap(unittest.TestCase):
     def test_skips_quoted_instruction_text(self):
         self.assertIsNone(speaker.extract_recap("Reply with `🔊 Speech mode on.`"))
         self.assertIsNone(speaker.extract_recap('in the form "🔊 <recap>"'))
+        # OpenCode shows the skill body, template line included, in the pane.
+        self.assertIsNone(speaker.extract_recap("┃  🔊 <spoken recap>\n┃  Rules for the recap:\n"))
 
     def test_no_recap(self):
         self.assertIsNone(speaker.extract_recap("no marker here"))

@@ -121,7 +121,7 @@ def extract_recap(text):
         if MARKER not in line or f'"{MARKER}' in line or f"`{MARKER}" in line:
             continue  # skip quoted instruction text
         m = RECAP_RE.search(line)
-        if m and m.group(1):
+        if m and m.group(1) and not m.group(1).startswith("<"):  # "<spoken recap>" template
             # Agent TUIs hard-wrap long lines at the pane width, so the recap
             # continues on the following lines until a blank one.
             parts = [m.group(1)]
