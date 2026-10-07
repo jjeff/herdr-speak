@@ -117,7 +117,7 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 
 **Voices.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
 
-**Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then restart Herdr, or run the `herdr-speak.start` action from a terminal opened after the grant. The built-in compact voices work without it.
+**Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then quit and restart Herdr. The Speaker inherits Herdr's access, and only processes started after the grant get it. The built-in compact voices work without it.
 
 ## Limits
 
