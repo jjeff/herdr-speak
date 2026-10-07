@@ -24,6 +24,7 @@ CONFIG_DIR = os.environ.get(
 )
 MARKER = "\U0001F50A"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
+BOX_CHARS = "".join(map(chr, range(0x2500, 0x2580)))  # TUI borders, e.g. pi's ┃
 BUSY = {"working", "blocked"}
 SETTLED = {"idle", "done"}
 READ_LINES = "150"
@@ -125,10 +126,11 @@ def extract_recap(text):
             # continues on the following lines until a blank one.
             parts = [m.group(1)]
             for cont in lines[i + 1:]:
-                if not cont.strip():
+                if not cont.strip(BOX_CHARS + " \t"):
                     break
-                parts.append(cont.strip())
-            return " ".join(parts)
+                parts.append(cont)
+            text = " ".join(p.strip(BOX_CHARS + " \t") for p in parts)
+            return text or None
     return None
 
 

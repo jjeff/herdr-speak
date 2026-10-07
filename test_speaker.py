@@ -17,6 +17,11 @@ class ExtractRecap(unittest.TestCase):
         self.assertEqual(speaker.extract_recap(text),
                          "Codex works now. I need you to log in, then tell me so I can finish testing.")
 
+    def test_strips_tui_borders(self):
+        # pi draws a box edge at the end of each line and a rule under the reply.
+        text = " 🔊 Grass is green.      ┃\n part two.   ┃\n─────────\n"
+        self.assertEqual(speaker.extract_recap(text), "Grass is green. part two.")
+
     def test_skips_quoted_instruction_text(self):
         self.assertIsNone(speaker.extract_recap("Reply with `🔊 Speech mode on.`"))
         self.assertIsNone(speaker.extract_recap('in the form "🔊 <recap>"'))
