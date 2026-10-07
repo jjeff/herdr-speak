@@ -1,11 +1,13 @@
 ---
-description: Turn spoken recaps on or off for this session
+name: speak
+description: Turn spoken recaps on or off for this session. Use only when the user runs /speak or asks to turn speech on or off.
 argument-hint: "[on|off]"
+disable-model-invocation: true
 ---
 
-The user ran `/speak $ARGUMENTS`.
+The user ran the speak toggle.
 
-If the argument is "off": speech mode is now OFF for this session. Stop adding the 🔊 recap line to your responses. Reply with exactly one line: `🔇 Speech mode off.`
+If the user asked for "off": speech mode is now OFF for this session. Stop adding the 🔊 recap line to your responses. Reply with exactly one line: `🔇 Speech mode off.`
 
 Otherwise: speech mode is now ON for the rest of this session. A tool on the user's machine reads your final 🔊 line aloud with text-to-speech when you finish each turn. From now on, end EVERY response with one final line in this exact form:
 
