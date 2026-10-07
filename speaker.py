@@ -38,7 +38,8 @@ def log(msg):
 
 def load_config():
     cfg = {"voice": None, "rate": 210, "include_local": True,
-           "machines": None, "poll_seconds": 2}
+           "machines": None, "poll_seconds": 2,
+           "announce": ["machine", "workspace", "tab"]}
     path = os.path.join(CONFIG_DIR, "config.json")
     try:
         with open(path) as f:
@@ -101,6 +102,24 @@ def find_agents(obj):
     return agents
 
 
+def source_name(agents_data, pane, machine, machine_label, parts):
+    """Spoken name for a pane, built from cfg["announce"] parts in order:
+    "machine" (remote panes only), "workspace", and "tab" labels."""
+    info = next((d for d in walk(agents_data) if d.get("pane_id") == pane), {})
+    names = []
+    for part in parts:
+        if part == "machine":
+            if machine:
+                names.append(machine_label)
+        elif part in ("workspace", "tab"):
+            want = info.get(part + "_id")
+            listing = parse_json(herdr([part, "list"], machine)) if want else None
+            hit = next((d for d in walk(listing) if d.get(part + "_id") == want), {})
+            if hit.get("label"):
+                names.append(hit["label"])
+    return ", ".join(names)
+
+
 def list_machines(cfg):
     """Return {machine_id: label} for enabled saved machines."""
     if cfg.get("machines"):
@@ -155,6 +174,7 @@ def main():
     last_seen = {}     # (machine, pane) -> (status, completion_seq)
     last_spoken = {}   # (machine, pane) -> hash of last recap spoken
     baselined = set()  # machines whose agents were listed at least once
+    last_source = None  # (machine, pane) of the last recap spoken
     machines, refreshed = {}, 0.0
 
     while True:
@@ -194,8 +214,15 @@ def main():
                     if last_spoken.get(key) == h:
                         continue  # already said this one
                     last_spoken[key] = h
+                    live = load_config()  # re-read so voice/rate/announce edits apply live
+                    if key != last_source:
+                        # Name the source only when it changes, so one agent stays quiet.
+                        name = source_name(data, pane, machine, label, live.get("announce") or [])
+                        if name:
+                            recap = f"{name}. {recap}"
+                    last_source = key
                     log(f"[{label} {pane}] {MARKER} {recap}")
-                    speak(recap, load_config())  # re-read so voice/rate edits apply live
+                    speak(recap, live)
 
         time.sleep(float(cfg.get("poll_seconds", 2)))
 

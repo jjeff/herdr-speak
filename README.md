@@ -109,8 +109,9 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 | `include_local` | true | also watch agents on Local |
 | `machines` | all enabled | list of machine ids or labels to watch |
 | `poll_seconds` | 2 | seconds between checks |
+| `announce` | `["machine", "workspace", "tab"]` | names to say before a recap from a different agent than the last one; `machine` applies to remote agents only, `[]` turns names off |
 
-`voice` and `rate` apply to the next recap. Restart the Speaker after changing the other keys.
+`voice`, `rate`, and `announce` apply to the next recap. Restart the Speaker after changing the other keys.
 
 **Voices.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
 
@@ -118,6 +119,7 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 
 ## Limits
 
+- **Recaps play one at a time.** When several agents finish together, each recap waits for the one before it, and starts with the agent's name.
 - **Only the latest recap is spoken.** If a session finishes several turns between two polls, you hear the last one.
 - **Polling is sequential.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
 - **Hermes recaps aren't spoken yet.** The toggle works, but Herdr 0.9.3 doesn't list Hermes v0.21 panes in `herdr agent list`, so the Speaker never sees their turns finish.
