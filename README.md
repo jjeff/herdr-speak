@@ -1,5 +1,7 @@
 # herdr-speak
 
+[![CI](https://github.com/jjeff/herdr-speak/actions/workflows/ci.yml/badge.svg)](https://github.com/jjeff/herdr-speak/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Hear a short spoken recap when a coding agent (Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, or Hermes) finishes a turn, even when that session runs on another machine you reach through [Herdr](https://herdr.dev).
 
 herdr-speak has two halves, and both live in this repo:
