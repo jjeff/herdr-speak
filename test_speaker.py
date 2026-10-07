@@ -1,9 +1,13 @@
 """Run with: python3 -m unittest"""
 
 import json
+import os
 import pathlib
 import re
+import socket
+import tempfile
 import unittest
+from unittest import mock
 
 import speaker
 
@@ -25,6 +29,11 @@ class ExtractRecap(unittest.TestCase):
         # pi draws a box edge at the end of each line and a rule under the reply.
         text = " 🔊 Grass is green.      ┃\n part two.   ┃\n─────────\n"
         self.assertEqual(speaker.extract_recap(text), "Grass is green. part two.")
+
+    def test_stops_at_hook_output(self):
+        # A Claude Code Stop hook prints right under the recap, with no blank line.
+        text = "● 🔊 The capital of Peru is Lima.\n  ⎿  Stop says: Turn finished\n"
+        self.assertEqual(speaker.extract_recap(text), "The capital of Peru is Lima.")
 
     def test_skips_quoted_instruction_text(self):
         self.assertIsNone(speaker.extract_recap("Reply with `🔊 Speech mode on.`"))
@@ -169,3 +178,60 @@ class Manifests(unittest.TestCase):
             head = skill.read_text().split("---")[1]
             self.assertRegex(head, rf"(?m)^name: {skill.parent.name}$", skill)
             self.assertRegex(head, r"(?m)^description: \S", skill)
+
+
+class SayCommand(unittest.TestCase):
+    def test_config_wins(self):
+        cfg = {"say_command": ["piper-say", "{text}"]}
+        self.assertEqual(speaker.say_command(cfg, "darwin"), ["piper-say", "{text}"])
+
+    def test_macos_voice_and_rate(self):
+        cmd = speaker.say_command({"voice": "Ava", "rate": 200}, "darwin")
+        self.assertEqual(cmd, ["say", "-v", "Ava", "-r", "200"])
+
+    def test_windows_uses_builtin_voice(self):
+        self.assertEqual(speaker.say_command({}, "win32")[0], "powershell")
+
+    def test_linux_picks_first_installed(self):
+        with mock.patch.object(speaker.shutil, "which", lambda c: c == "espeak-ng"):
+            self.assertEqual(speaker.say_command({}, "linux"), ["espeak-ng", "--stdin"])
+        with mock.patch.object(speaker.shutil, "which", lambda c: False):
+            self.assertIsNone(speaker.say_command({}, "linux"))
+
+
+class Control(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        paths = {
+            "STATE_DIR": self.dir.name,
+            "LOCK_PATH": os.path.join(self.dir.name, "speaker.lock"),
+            "PID_PATH": os.path.join(self.dir.name, "speaker.pid"),
+        }
+        self.patches = [mock.patch.object(speaker, k, v) for k, v in paths.items()]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.dir.cleanup()
+
+    def test_lock_is_exclusive(self):
+        first = speaker.take_lock()
+        self.assertIsNotNone(first)
+        self.assertIsNone(speaker.take_lock())
+        first.close()
+        speaker.take_lock().close()
+
+    def test_poke_reaches_the_speaker(self):
+        self.assertFalse(speaker.send(b"poke"))  # nothing running yet
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", 0))
+        with open(speaker.PID_PATH, "w") as f:
+            f.write(f"{os.getpid()} {sock.getsockname()[1]}")
+        with mock.patch.object(speaker, "CONTROL", sock):
+            self.assertTrue(speaker.send(b"poke"))
+            speaker.listen(2)
+            self.assertTrue(speaker.POKED)
+        speaker.POKED = False
+        sock.close()
