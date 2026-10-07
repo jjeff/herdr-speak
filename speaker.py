@@ -114,12 +114,21 @@ def list_machines(cfg):
 
 
 def extract_recap(text):
-    for line in reversed((text or "").splitlines()):
+    lines = (text or "").splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i]
         if MARKER not in line or f'"{MARKER}' in line or f"`{MARKER}" in line:
             continue  # skip quoted instruction text
         m = RECAP_RE.search(line)
         if m and m.group(1):
-            return m.group(1)
+            # Agent TUIs hard-wrap long lines at the pane width, so the recap
+            # continues on the following lines until a blank one.
+            parts = [m.group(1)]
+            for cont in lines[i + 1:]:
+                if not cont.strip():
+                    break
+                parts.append(cont.strip())
+            return " ".join(parts)
     return None
 
 

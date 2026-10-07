@@ -10,6 +10,13 @@ class ExtractRecap(unittest.TestCase):
         text = "⏺ 🔊 Old recap.\nmore output\n⏺ 🔊 Did the thing. Want more?\n\n❯ "
         self.assertEqual(speaker.extract_recap(text), "Did the thing. Want more?")
 
+    def test_joins_wrapped_recap(self):
+        # Claude Code hard-wraps at the pane width; recent-unwrapped keeps the break.
+        text = ("  🔊 Codex works now. I need you to log in, then tell\n"
+                "  me so I can finish testing.\n\n❯ ")
+        self.assertEqual(speaker.extract_recap(text),
+                         "Codex works now. I need you to log in, then tell me so I can finish testing.")
+
     def test_skips_quoted_instruction_text(self):
         self.assertIsNone(speaker.extract_recap("Reply with `🔊 Speech mode on.`"))
         self.assertIsNone(speaker.extract_recap('in the form "🔊 <recap>"'))

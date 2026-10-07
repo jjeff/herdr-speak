@@ -42,7 +42,7 @@ herdr plugin install jjeff/herdr-speak
 | agent | install | toggle |
 |---|---|---|
 | Claude Code | `claude plugin marketplace add jjeff/herdr-speak`<br>`claude plugin install herdr-speak@herdr-speak` | `/speak` |
-| Codex | `codex plugin marketplace add jjeff/herdr-speak`<br>`codex plugin add herdr-speak@herdr-speak` | `$speak` |
+| Codex | `codex plugin marketplace add jjeff/herdr-speak`<br>`codex plugin add herdr-speak@herdr-speak` | `$herdr-speak:speak` |
 | Gemini CLI | `gemini extensions install https://github.com/jjeff/herdr-speak` | `/speak` |
 | OpenCode | `git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak`<br>`ln -s ~/.herdr-speak/skills/speak ~/.config/opencode/skills/speak` | `/speak` |
 | pi | `pi install git:github.com/jjeff/herdr-speak` | `/skill:speak` |
@@ -100,6 +100,7 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 
 - **Only the latest recap is spoken.** If a session finishes several turns between two polls, you hear the last one.
 - **Polling is sequential.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
+- **Background work delays the recap.** Herdr reports a Claude Code session as working while its background agents or commands run, so a turn that ends with background work pending is spoken only after that work finishes and a later turn ends.
 - **Detection uses Herdr's `completion_seq`** to catch turns shorter than one poll. Older servers that don't report it fall back to watching `working` → `done`/`idle`, which can miss a very short turn.
 
 ## Development
