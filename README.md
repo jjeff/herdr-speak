@@ -156,6 +156,23 @@ python3 -m unittest
 
 For Hermes, add the checkout's `skills` directory to `skills.external_dirs` in `~/.hermes/config.yaml`.
 
+## Alternatives
+
+If you don't use Herdr, or you only want speech from one agent on one machine, one of these may suit you better. Listed as of October 2026; descriptions are from each project's README.
+
+| project | agents | how it speaks |
+|---|---|---|
+| [blacktop/mcp-tts](https://github.com/blacktop/mcp-tts) | any MCP host, including Claude Code, Codex, and Gemini CLI | An MCP server the agent calls to speak, with macOS `say`, ElevenLabs, OpenAI, and local voices |
+| [kyleoliveiro/claude-speak](https://github.com/kyleoliveiro/claude-speak) | Claude Code | A stop hook summarizes each reply in one line and speaks it with Kokoro, a local model |
+| [hopchouinard/claude-speak](https://github.com/hopchouinard/claude-speak) | Claude Code | Spoken summaries each turn, plus a mode where Claude speaks mid-turn; OpenAI or ElevenLabs voices |
+| [ybouhjira/claude-code-tts](https://github.com/ybouhjira/claude-code-tts) | Claude Code | An MCP plugin with a stop hook that speaks the first sentence of each reply with OpenAI TTS |
+| [cris-m/claude_voice](https://github.com/cris-m/claude_voice) | Claude Code | Speaks replies, notifications, and command completions with local voice models |
+| [silverdolphin863/claude-speak](https://github.com/silverdolphin863/claude-speak) | Claude Code | Speaks replies with Microsoft neural voices through edge-tts, no API key |
+| [melderan/claude-code-tts](https://github.com/melderan/claude-code-tts) | Claude Code | A stop hook that speaks new reply text with Piper, a local model |
+| [praneybehl/claude-code-voice-hook](https://github.com/praneybehl/claude-code-voice-hook) | Claude Code | A stop hook that sends each reply to a local OpenAI-compatible TTS server |
+
+Know another one? Open a pull request.
+
 ## License
 
 MIT
