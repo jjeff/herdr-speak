@@ -129,7 +129,10 @@ def speak(text, cfg):
         cmd += ["-v", cfg["voice"]]
     if cfg.get("rate"):
         cmd += ["-r", str(cfg["rate"])]
-    subprocess.run(cmd + [text])
+    if subprocess.run(cmd + [text]).returncode != 0:
+        # Most often: a Premium or Siri voice without Full Disk Access.
+        log("`say` failed: Premium and Siri voices need Full Disk Access for the "
+            "terminal app running Herdr (then restart the Speaker); see the README")
 
 
 def main():
