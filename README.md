@@ -5,7 +5,7 @@ Hear a short spoken recap when a coding agent (Claude Code, Codex, Antigravity, 
 herdr-speak has two halves, and both live in this repo:
 
 - **A `/speak` skill** (`skills/speak/SKILL.md`) for your coding agent. With speech on, the agent ends every reply with one line: `🔊 <spoken recap>`.
-- **A Herdr plugin** that runs a background "Speaker" on your Mac. Herdr starts it automatically. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
+- **A Herdr plugin** that runs a background "Speaker" on the computer in front of you: macOS, Linux, or Windows. Herdr starts it automatically. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with the system voice.
 
 ## Why herdr-speak
 
@@ -15,39 +15,40 @@ Other ways to hear from your agents make different trade-offs:
 - **Herdr plugins that summarize the pane,** such as [herdr-announcer](https://github.com/nhclink16/herdr-announcer) and [herdr-bleatr](https://github.com/zetlen/herdr-bleatr), run a separate model call on each agent's terminal output. They need no setup inside the agent, but each announcement costs a model call, the summary is a guess from scraped text, and they run on each Herdr server, so remote audio has to be routed back to you over SSH.
 - **A stop hook that pipes the reply into `say`** plays the audio on the machine where the agent runs. For an agent on a remote machine you reach through Herdr, that's a computer you aren't sitting at, so you hear nothing. The hook also reads a reply written for the screen, with its code, paths, and tables.
 
-herdr-speak asks the agent that did the work for a one-line recap written to be heard. The Speaker is installed only on your Mac and reaches every machine through Herdr, so remote machines need nothing but the skill. Recaps from several agents queue instead of being dropped, and with speech off a session costs nothing.
+herdr-speak asks the agent that did the work for a one-line recap written to be heard. The Speaker is installed only on the computer you listen at and reaches every machine through Herdr, so remote machines need nothing but the skill. Recaps from several agents queue instead of being dropped, and with speech off a session costs nothing.
 
 ## How it works
 
 ```
- Remote machine                            Your Mac (Herdr "Local")
+ Remote machine                            Your computer (Herdr "Local")
  ──────────────                            ────────────────────────
  Agent session                             Speaker (speaker.py, background)
    /speak  → ends every reply with           polls `herdr --machine X agent list`
    "🔊 <one-line spoken recap>"              sees a turn finish
                                              `herdr --machine X agent read <pane>`
-                                             finds the last 🔊 line → `say`
+                                             finds the last 🔊 line → speaks it
 ```
 
 - **One switch per session.** Run `/speak` or `/speak off` inside the agent. With speech off, the agent writes no recap, so it costs nothing and nothing is spoken.
-- **Audio plays where you are.** Install the Herdr plugin only on your Mac. The Speaker runs there and reaches remote machines through `herdr --machine`.
+- **Audio plays where you are.** Install the Herdr plugin only on the computer you listen at. The Speaker runs there and reaches remote machines through `herdr --machine`.
 - **The 🔊 line stays on screen,** so you can read along.
 
 ## Requirements
 
-- macOS on the machine where you listen (`say` and `python3` ship with it).
+- Python 3.9 or newer on the machine where you listen, which runs macOS, Linux, or Windows. macOS ships with it.
+- A speech command there: macOS `say` and Windows' built-in voice work out of the box; on Linux, install `spd-say` (speech-dispatcher) or `espeak-ng`, or set `say_command`.
 - Herdr 0.9.3 or newer on every machine.
 - A supported agent on every machine that runs sessions: Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, or Hermes.
 
 ## Install
 
-**1. On your Mac, install the Herdr plugin:**
+**1. On the computer you listen at, install the Herdr plugin:**
 
 ```sh
 herdr plugin install jjeff/herdr-speak
 ```
 
-**2. On every machine that runs agents** (your Mac included, if you run sessions there), install the `/speak` skill for each agent you use:
+**2. On every machine that runs agents** (the one you listen at included, if you run sessions there), install the `/speak` skill for each agent you use:
 
 | agent | install | toggle |
 |---|---|---|
@@ -127,17 +128,20 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 
 | key | default | meaning |
 |---|---|---|
-| `voice` | system voice | a `say -v` voice name; `say -v '?'` lists them |
-| `rate` | 210 | words per minute |
+| `voice` | system voice | macOS only: a `say -v` voice name; `say -v '?'` lists them |
+| `rate` | 210 | macOS only: words per minute |
+| `say_command` | the platform's | an argv list that speaks; `"{text}"` in an argument is replaced by the recap, otherwise the recap arrives on stdin |
 | `include_local` | true | also watch agents on Local |
 | `machines` | all enabled | list of machine ids or labels to watch |
 | `poll_seconds` | 2 | seconds between checks |
 | `alert_blocked` | true | say "<name> needs you" when an agent stops to ask you something |
 | `announce` | `["machine", "workspace", "tab"]` | names to say before a recap from a different agent than the last one; `machine` applies to remote agents only, `[]` turns names off |
 
-`voice`, `rate`, `announce`, and `alert_blocked` apply to the next recap. Run the `herdr-speak.start` action to restart the Speaker after changing the other keys.
+`voice`, `rate`, `say_command`, `announce`, and `alert_blocked` apply to the next recap. Run the `herdr-speak.start` action to restart the Speaker after changing the other keys.
 
-**Voices.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
+**Voices on macOS.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
+
+**Other voices and platforms.** On Windows the Speaker uses the default voice from Settings → Time & language → Speech. On Linux it uses the first of `spd-say`, `espeak-ng`, or `espeak` it finds. To use anything else, such as Piper or a local OpenAI-compatible speech server, point `say_command` at it. For example, `["espeak-ng", "-v", "en-gb", "{text}"]` picks a British espeak voice.
 
 **Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then quit and restart Herdr. The Speaker inherits Herdr's access, and only processes started after the grant get it. The built-in compact voices work without it.
 

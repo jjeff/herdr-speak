@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """herdr-speak speaker.
 
-Runs on YOUR machine: Herdr's startup hook launches it in the background with
---background (see herdr-plugin.toml). Polls agents on Local and on every
-enabled saved SSH machine. When an agent settles after
-working, reads its recent output, finds the last line starting with the speaker
-emoji, and speaks it with macOS `say`.
+Runs on YOUR machine (macOS, Linux, or Windows): Herdr's startup hook launches
+it in the background through herdr-speak.cmd. Polls agents on Local and on every
+enabled saved SSH machine. When an agent settles after working, reads its recent
+output, finds the last line starting with the speaker emoji, and speaks it with
+the platform's speech command (or say_command from config).
 
 Config (optional): $HERDR_PLUGIN_CONFIG_DIR/config.json, see config.example.json.
-Log and lock: $HERDR_PLUGIN_STATE_DIR/speaker.log and speaker.lock.
+Log, lock, and control port: speaker.log, speaker.lock, and speaker.pid in
+$HERDR_PLUGIN_STATE_DIR.
 
   speaker.py                 run in the foreground (development)
   speaker.py --background    detach, log to speaker.log; no-op if one is running
@@ -16,9 +17,10 @@ Log and lock: $HERDR_PLUGIN_STATE_DIR/speaker.log and speaker.lock.
   speaker.py --poke          make the running speaker poll now (Herdr event hook)
   speaker.py --skip          stop the recap being spoken now
   speaker.py --mute          toggle muting; the speaker keeps listening
+  speaker.py --tail          follow the log (the log pane)
+  speaker.py --open-log      open the log pane
 """
 
-import fcntl
 import hashlib
 import json
 import os
@@ -26,17 +28,33 @@ import re
 import select
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 HERDR = os.environ.get("HERDR_BIN_PATH") or shutil.which("herdr") or "herdr"
 CONFIG_DIR = os.environ.get("HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herdr-speak"))
 STATE_DIR = os.environ.get("HERDR_PLUGIN_STATE_DIR", CONFIG_DIR)
 LOCK_PATH = os.path.join(STATE_DIR, "speaker.lock")
+PID_PATH = os.path.join(STATE_DIR, "speaker.pid")  # "<pid> <control port>"
 LOG_PATH = os.path.join(STATE_DIR, "speaker.log")
 MUTE_PATH = os.path.join(STATE_DIR, "muted")
 LOG_MAX_BYTES = 1_000_000
+PLUGIN_ID = os.environ.get("HERDR_PLUGIN_ID", "herdr-speak")
+# A detached Windows process has no console, so every child would open a window.
+NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
+# Windows' built-in voice; the text arrives on stdin.
+WINDOWS_SPEAK = (
+    "[Console]::InputEncoding = [Text.Encoding]::UTF8; "
+    "Add-Type -AssemblyName System.Speech; "
+    "(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak([Console]::In.ReadToEnd())"
+)
 MARKER = "\U0001f50a"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
 BOX_CHARS = "".join(map(chr, range(0x2500, 0x2580)))  # TUI borders, e.g. pi's ┃
@@ -75,7 +93,14 @@ def load_config():
 def herdr(args, machine=None):
     cmd = [HERDR] + (["--machine", machine] if machine else []) + args
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=CALL_TIMEOUT)
+        r = subprocess.run(
+            cmd,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=CALL_TIMEOUT,
+            **NO_WINDOW,
+        )
     except subprocess.TimeoutExpired:
         return None
     return r.stdout if r.returncode == 0 else None
@@ -199,30 +224,99 @@ def extract_recap(text):
     return None
 
 
-SAYING = None  # the running `say`, so --skip can stop it
+SAYING = None  # the running speech process, so --skip can stop it
+SKIPPED = False
+POKED = False
+CONTROL = None  # UDP socket on 127.0.0.1 that --poke and --skip send to
+
+
+def say_command(cfg, platform=sys.platform):
+    """Argv for speech. "{text}" in an argument is replaced by the recap;
+    otherwise the recap goes to stdin. None when nothing is available."""
+    if cfg.get("say_command"):
+        return list(cfg["say_command"])
+    if platform == "darwin":
+        cmd = ["say"]
+        if cfg.get("voice"):
+            cmd += ["-v", cfg["voice"]]
+        if cfg.get("rate"):
+            cmd += ["-r", str(cfg["rate"])]
+        return cmd
+    if platform == "win32":
+        return ["powershell", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_SPEAK]
+    for cmd in (["spd-say", "-w", "{text}"], ["espeak-ng", "--stdin"], ["espeak", "--stdin"]):
+        if shutil.which(cmd[0]):
+            return cmd
+    return None
 
 
 def speak(text, cfg):
-    global SAYING
+    global SAYING, SKIPPED
     if os.path.exists(MUTE_PATH):
         log("(muted)")
         return
-    cmd = ["say"]
-    if cfg.get("voice"):
-        cmd += ["-v", cfg["voice"]]
-    if cfg.get("rate"):
-        cmd += ["-r", str(cfg["rate"])]
-    SAYING = subprocess.Popen(cmd + [text])
-    rc = SAYING.wait()
-    SAYING = None
-    if rc == -signal.SIGTERM:
+    cmd = say_command(cfg)
+    if not cmd:
+        log("no speech command found: install spd-say or espeak-ng, or set say_command")
+        return
+    stdin = not any("{text}" in arg for arg in cmd)
+    argv = [arg.replace("{text}", text) for arg in cmd]
+    try:
+        SAYING = subprocess.Popen(argv, stdin=subprocess.PIPE if stdin else subprocess.DEVNULL, **NO_WINDOW)
+    except OSError as e:
+        log(f"speech command failed to start: {e}")
+        return
+    if stdin:
+        try:
+            SAYING.stdin.write(text.encode("utf-8"))
+            SAYING.stdin.close()
+        except OSError:
+            pass
+    SKIPPED = False
+    while SAYING.poll() is None:
+        listen(0.2)  # --skip can stop it mid-sentence
+    rc, SAYING = SAYING.returncode, None
+    if SKIPPED:
         log("(skipped)")
     elif rc != 0:
-        # Most often: a Premium or Siri voice without Full Disk Access.
-        log(
-            "`say` failed: Premium and Siri voices need Full Disk Access for the "
-            "terminal app running Herdr (then restart the Speaker); see the README"
-        )
+        log(f"speech command exited with {rc}")
+        if sys.platform == "darwin":
+            # Most often: a Premium or Siri voice without Full Disk Access.
+            log("Premium and Siri voices need Full Disk Access for Herdr's terminal app; see the README")
+
+
+def listen(timeout):
+    """Handle control messages for up to timeout seconds."""
+    global POKED, SKIPPED
+    if not select.select([CONTROL], [], [], timeout)[0]:
+        return
+    msg = CONTROL.recv(64)
+    if msg == b"skip" and SAYING:
+        SKIPPED = True
+        SAYING.terminate()
+    elif msg == b"poke":
+        POKED = True
+
+
+def nap(seconds):
+    """Sleep until the next poll, or until a local agent changes state."""
+    global POKED
+    deadline = time.time() + seconds
+    while not POKED and time.time() < deadline:
+        listen(max(0.0, deadline - time.time()))
+    POKED = False
+
+
+def send(msg):
+    """Send a control message to the running speaker. False when none is running."""
+    try:
+        with open(PID_PATH) as f:
+            port = int(f.read().split()[1])
+    except (OSError, ValueError, IndexError):
+        return False
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.sendto(msg, ("127.0.0.1", port))
+    return True
 
 
 def take_lock():
@@ -231,25 +325,32 @@ def take_lock():
     os.makedirs(STATE_DIR, exist_ok=True)
     f = open(LOCK_PATH, "a+")
     try:
-        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if os.name == "nt":
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         f.close()
         return None
-    f.seek(0)
-    f.truncate()
-    f.write(str(os.getpid()))
-    f.flush()
     return f
 
 
-def signal_running(sig):
-    """Send sig to the running speaker. False when none is running."""
+def stop_running():
+    lock = take_lock()
+    if lock:  # nothing running; don't trust a stale pid file
+        lock.close()
+        return
     try:
-        with open(LOCK_PATH) as f:
-            os.kill(int(f.read().strip()), sig)
-        return True
-    except (OSError, ValueError):
-        return False
+        with open(PID_PATH) as f:
+            os.kill(int(f.read().split()[0]), signal.SIGTERM)
+    except (OSError, ValueError, IndexError):
+        return
+    for _ in range(30):  # wait for its lock to free up
+        lock = take_lock()
+        if lock:
+            lock.close()
+            return
+        time.sleep(0.1)
 
 
 def toggle_mute():
@@ -260,78 +361,81 @@ def toggle_mute():
         os.makedirs(STATE_DIR, exist_ok=True)
         open(MUTE_PATH, "w").close()
         state = "muted"
-        signal_running(signal.SIGUSR2)  # and stop anything mid-sentence
+        send(b"skip")  # and stop anything mid-sentence
     herdr(["notification", "show", "herdr-speak", "--body", f"Speaker {state}", "--sound", "none"])
 
 
-def stop_running():
-    if not signal_running(signal.SIGTERM):
-        return  # nothing running
-    for _ in range(30):  # wait for its lock to free up
-        lock = take_lock()
-        if lock:
-            lock.close()
-            return
-        time.sleep(0.1)
-
-
 def detach():
-    if os.fork():
-        os._exit(0)  # parent: let Herdr's hook finish
-    os.setsid()  # leave the hook's process group so it isn't reaped with it
+    """Relaunch this script in the background, logging to LOG_PATH."""
     os.makedirs(STATE_DIR, exist_ok=True)
     try:
         if os.path.getsize(LOG_PATH) > LOG_MAX_BYTES:
             os.truncate(LOG_PATH, 0)  # ponytail: no rotation, just start over
     except OSError:
         pass
-    out = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
-    null = os.open(os.devnull, os.O_RDONLY)
-    os.dup2(null, 0)
-    os.dup2(out, 1)
-    os.dup2(out, 2)
+    kw = {"stdin": subprocess.DEVNULL, "stderr": subprocess.STDOUT}
+    if os.name == "nt":
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        # Leave Herdr's job object too, if it allows that, so the hook's exit doesn't end us.
+        attempts = [{"creationflags": flags | subprocess.CREATE_BREAKAWAY_FROM_JOB}, {"creationflags": flags}]
+    else:
+        attempts = [{"start_new_session": True}]  # leave the hook's process group
+    with open(LOG_PATH, "ab") as out:
+        for extra in attempts:
+            try:
+                subprocess.Popen([sys.executable, os.path.abspath(__file__)], stdout=out, **kw, **extra)
+                return
+            except OSError:
+                continue
+    raise SystemExit("could not start the speaker in the background")
 
 
-def wake_pipe():
-    """Return a fd that turns readable when a signal arrives, so the poll sleep
-    ends early on --poke. (Lock and Event waits aren't interruptible on macOS.)"""
-    r, w = os.pipe()
-    os.set_blocking(r, False)
-    os.set_blocking(w, False)
-    signal.set_wakeup_fd(w)
-    signal.signal(signal.SIGUSR1, lambda *_: None)
-    signal.signal(signal.SIGUSR2, lambda *_: SAYING and SAYING.terminate())
-    return r
-
-
-def nap(fd, seconds):
-    select.select([fd], [], [], seconds)
-    try:
-        os.read(fd, 512)
-    except BlockingIOError:
-        pass
+def tail():
+    """Follow the log, like tail -F, for the log pane on every platform."""
+    os.makedirs(STATE_DIR, exist_ok=True)
+    open(LOG_PATH, "a").close()
+    with open(LOG_PATH, encoding="utf-8", errors="replace") as f:
+        print("".join(f.readlines()[-40:]), end="", flush=True)
+        while True:
+            line = f.readline()
+            if line:
+                print(line, end="", flush=True)
+                continue
+            if os.path.getsize(LOG_PATH) < f.tell():
+                f.seek(0)  # truncated on restart
+            time.sleep(0.5)
 
 
 def main():
+    global CONTROL
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", errors="replace")  # Windows defaults to cp1252
     if "--poke" in sys.argv:
-        return signal_running(signal.SIGUSR1)
+        return send(b"poke")
     if "--skip" in sys.argv:
-        return signal_running(signal.SIGUSR2)
+        return send(b"skip")
     if "--mute" in sys.argv:
         return toggle_mute()
+    if "--tail" in sys.argv:
+        return tail()
+    if "--open-log" in sys.argv:
+        args = ["--plugin", PLUGIN_ID, "--entrypoint", "log", "--placement", "split", "--no-focus"]
+        return herdr(["plugin", "pane", "open", *args])
     if "--restart" in sys.argv:
         stop_running()
     if "--background" in sys.argv:
-        detach()
+        return detach()
     lock = take_lock()  # noqa: F841 (held until exit)
     if not lock:
         log("already running")
         return
-    if not shutil.which("say"):
-        log("`say` not found: run the speaker on your Mac, with Local selected.")
-        sys.exit(1)
     cfg = load_config()
-    wake = wake_pipe()
+    if not say_command(cfg):
+        log("no speech command found: install spd-say or espeak-ng, or set say_command")
+    CONTROL = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    CONTROL.bind(("127.0.0.1", 0))
+    with open(PID_PATH, "w") as f:
+        f.write(f"{os.getpid()} {CONTROL.getsockname()[1]}")
     log(f"herdr-speak listening (herdr: {HERDR})")
     last_seen = {}  # (machine, pane) -> (status, completion_seq)
     last_spoken = {}  # (machine, pane) -> hash of last recap spoken
@@ -389,7 +493,7 @@ def main():
                     log(f"[{label} {pane}] {MARKER} {recap}")
                     speak(recap, live)
 
-        nap(wake, float(cfg.get("poll_seconds", 2)))
+        nap(float(cfg.get("poll_seconds", 2)))
 
 
 if __name__ == "__main__":

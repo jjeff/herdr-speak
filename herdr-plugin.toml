@@ -4,47 +4,50 @@ version = "0.2.0"
 # Oldest version tested. Needs `--machine` API forwarding and `agent read --source recent-unwrapped`.
 min_herdr_version = "0.9.3"
 description = "Hear a short spoken recap when a coding agent finishes a turn, on Local and on saved SSH machines"
-platforms = ["macos"]
+platforms = ["macos", "linux", "windows"]
+
+# Every command goes through herdr-speak.cmd, which is both a shell script and a
+# Windows batch file, because Windows' python3 is often a Store placeholder.
 
 # The Speaker runs in the background, started with Herdr. It holds a lock, so
 # reruns (server handoff, the start action) never start a second copy.
 [[startup]]
-command = ["python3", "speaker.py", "--background"]
+command = ["./herdr-speak.cmd", "--background"]
 
 # Restart it, for example after editing config.json or updating the plugin.
 [[actions]]
 id = "start"
 title = "Restart speaker"
 contexts = ["workspace"]
-command = ["python3", "speaker.py", "--restart", "--background"]
+command = ["./herdr-speak.cmd", "--restart", "--background"]
 
 # Local agents: poll right away instead of waiting for the next tick. Remote
 # agents' events fire on their own servers, so the Speaker still polls those.
 [[events]]
 on = "pane.agent_status_changed"
-command = ["python3", "speaker.py", "--poke"]
+command = ["./herdr-speak.cmd", "--poke"]
 
 [[actions]]
 id = "mute"
 title = "Mute or unmute speaker"
 contexts = ["workspace"]
-command = ["python3", "speaker.py", "--mute"]
+command = ["./herdr-speak.cmd", "--mute"]
 
 [[actions]]
 id = "skip"
 title = "Skip the current recap"
 contexts = ["workspace"]
-command = ["python3", "speaker.py", "--skip"]
+command = ["./herdr-speak.cmd", "--skip"]
 
 # Watch what the Speaker hears and says.
 [[panes]]
 id = "log"
 title = "Speaker log"
 placement = "split"
-command = ["sh", "-c", "touch \"$HERDR_PLUGIN_STATE_DIR/speaker.log\"; exec tail -n 40 -F \"$HERDR_PLUGIN_STATE_DIR/speaker.log\""]
+command = ["./herdr-speak.cmd", "--tail"]
 
 [[actions]]
 id = "log"
 title = "Show speaker log"
 contexts = ["workspace"]
-command = ["sh", "-c", "\"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint log --placement split --no-focus"]
+command = ["./herdr-speak.cmd", "--open-log"]
