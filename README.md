@@ -13,7 +13,7 @@ Other ways to hear from your agents make different trade-offs:
 
 - **Herdr's own sounds and toasts** (`[ui.sound]`, `[ui.toast]`) tell you *that* an agent finished or needs input. They don't tell you what it did.
 - **Herdr plugins that summarize the pane,** such as [herdr-announcer](https://github.com/nhclink16/herdr-announcer) and [herdr-bleatr](https://github.com/zetlen/herdr-bleatr), run a separate model call on each agent's terminal output. They need no setup inside the agent, but each announcement costs a model call, the summary is a guess from scraped text, and they run on each Herdr server, so remote audio has to be routed back to you over SSH.
-- **A stop hook that pipes the reply into `say`** runs on the machine where the agent runs, and reads a reply written for the screen, with its code, paths, and tables.
+- **A stop hook that pipes the reply into `say`** plays the audio on the machine where the agent runs. For an agent on a remote machine you reach through Herdr, that's a computer you aren't sitting at, so you hear nothing. The hook also reads a reply written for the screen, with its code, paths, and tables.
 
 herdr-speak asks the agent that did the work for a one-line recap written to be heard. The Speaker is installed only on your Mac and reaches every machine through Herdr, so remote machines need nothing but the skill. Recaps from several agents queue instead of being dropped, and with speech off a session costs nothing.
 
