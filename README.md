@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" alt="A ram with a speech bubble saying herdr-speak" width="240"></p>
+
 # herdr-speak
 
 [![CI](https://github.com/jjeff/herdr-speak/actions/workflows/ci.yml/badge.svg)](https://github.com/jjeff/herdr-speak/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
