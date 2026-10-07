@@ -87,13 +87,16 @@ def status_of(d):
 
 
 def find_agents(obj):
-    """Defensive: return {pane_id: status} for any dict that looks like an agent."""
+    """Defensive: return {pane_id: (status, completion_seq)} for any dict that
+    looks like an agent. completion_seq is None when Herdr doesn't report it
+    (older servers, a pane that is working, or one that never finished a turn)."""
     agents = {}
     for d in walk(obj):
         pane = d.get("pane_id") or d.get("pane")
         st = status_of(d)
         if isinstance(pane, str) and st:
-            agents[pane] = st
+            seq = d.get("completion_seq")
+            agents[pane] = (st, seq if isinstance(seq, int) else None)
     return agents
 
 
@@ -135,7 +138,7 @@ def main():
         sys.exit(1)
     cfg = load_config()
     log(f"herder-speak listening (herdr: {HERDR})")
-    last_status = {}   # (machine, pane) -> status
+    last_seen = {}     # (machine, pane) -> (status, completion_seq)
     last_spoken = {}   # (machine, pane) -> hash of last recap spoken
     machines, refreshed = {}, 0.0
 
@@ -149,13 +152,16 @@ def main():
         targets = ([(None, "local")] if cfg["include_local"] else []) + list(machines.items())
         for machine, label in targets:
             agents = find_agents(parse_json(herdr(["agent", "list"], machine)))
-            for pane, st in agents.items():
+            for pane, (st, seq) in agents.items():
                 key = (machine, pane)
-                prev = last_status.get(key)
-                last_status[key] = st
-                if prev is None or prev == st:
-                    continue  # baseline or no change
-                if prev in BUSY and st in SETTLED:
+                prev, prev_seq = last_seen.get(key, (None, None))
+                # Herdr drops completion_seq while a pane is working; keep the last one.
+                last_seen[key] = (st, prev_seq if seq is None else seq)
+                if prev is None:
+                    continue  # baseline
+                # A changed completion_seq catches turns shorter than one poll;
+                # the status transition covers servers that don't report it.
+                if (seq is not None and seq != prev_seq) or (prev in BUSY and st in SETTLED):
                     out = herdr(["agent", "read", pane, "--source",
                                  "recent-unwrapped", "--lines", READ_LINES], machine)
                     recap = extract_recap(out)
@@ -166,7 +172,7 @@ def main():
                         continue  # already said this one
                     last_spoken[key] = h
                     log(f"[{label} {pane}] {MARKER} {recap}")
-                    speak(recap, cfg)
+                    speak(recap, load_config())  # re-read so voice/rate edits apply live
 
         time.sleep(float(cfg.get("poll_seconds", 2)))
 
