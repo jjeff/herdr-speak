@@ -6,15 +6,27 @@ min_herdr_version = "0.9.3"
 description = "Hear a short spoken recap when a coding agent finishes a turn, on Local and on saved SSH machines"
 platforms = ["macos"]
 
-# Long-running listener. Open it while LOCAL is selected so it runs on your Mac.
-[[panes]]
-id = "speaker"
-title = "Speaker"
-placement = "split"
-command = ["python3", "speaker.py"]
+# The Speaker runs in the background, started with Herdr. It holds a lock, so
+# reruns (server handoff, the start action) never start a second copy.
+[[startup]]
+command = ["python3", "speaker.py", "--background"]
 
+# Restart it, for example after editing config.json or updating the plugin.
 [[actions]]
 id = "start"
-title = "Start speaker"
+title = "Restart speaker"
 contexts = ["workspace"]
-command = ["sh", "-c", "\"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint speaker --placement split --no-focus"]
+command = ["python3", "speaker.py", "--restart", "--background"]
+
+# Watch what the Speaker hears and says.
+[[panes]]
+id = "log"
+title = "Speaker log"
+placement = "split"
+command = ["sh", "-c", "touch \"$HERDR_PLUGIN_STATE_DIR/speaker.log\"; exec tail -n 40 -F \"$HERDR_PLUGIN_STATE_DIR/speaker.log\""]
+
+[[actions]]
+id = "log"
+title = "Show speaker log"
+contexts = ["workspace"]
+command = ["sh", "-c", "\"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint log --placement split --no-focus"]

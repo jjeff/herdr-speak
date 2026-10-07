@@ -5,14 +5,14 @@ Hear a short spoken recap when a coding agent (Claude Code, Codex, Antigravity, 
 herdr-speak has two halves, and both live in this repo:
 
 - **A `/speak` skill** (`skills/speak/SKILL.md`) for your coding agent. With speech on, the agent ends every reply with one line: `🔊 <spoken recap>`.
-- **A Herdr plugin** that runs a small "Speaker" pane on your Mac. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
+- **A Herdr plugin** that runs a background "Speaker" on your Mac. Herdr starts it automatically. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
 
 ## How it works
 
 ```
  Remote machine                            Your Mac (Herdr "Local")
  ──────────────                            ────────────────────────
- Agent session                             Speaker pane (speaker.py)
+ Agent session                             Speaker (speaker.py, background)
    /speak  → ends every reply with           polls `herdr --machine X agent list`
    "🔊 <one-line spoken recap>"              sees a turn finish
                                              `herdr --machine X agent read <pane>`
@@ -20,7 +20,7 @@ herdr-speak has two halves, and both live in this repo:
 ```
 
 - **One switch per session.** Run `/speak` or `/speak off` inside the agent. With speech off, the agent writes no recap, so it costs nothing and nothing is spoken.
-- **Audio plays where you are.** Herdr runs a plugin pane on the server that owns it, so open the Speaker while **Local** is selected. It reaches remote machines through `herdr --machine`.
+- **Audio plays where you are.** Install the Herdr plugin only on your Mac. The Speaker runs there and reaches remote machines through `herdr --machine`.
 - **The 🔊 line stays on screen,** so you can read along.
 
 ## Requirements
@@ -53,20 +53,22 @@ Restart the agent after installing. Add `on` or `off` after the toggle; on is th
 
 **3. Add each remote machine to Herdr** if you haven't already: `herdr machine add <host>`.
 
-**4. Start the Speaker.** Select **Local** in Herdr, then run:
+**4. Start the Speaker.** Herdr starts it in the background every time Herdr starts. To start it now without restarting Herdr, run:
 
 ```sh
 herdr plugin action invoke herdr-speak.start
 ```
 
-You can also bind it to a key in your Herdr config:
+That action also restarts a running Speaker. Only one copy ever runs.
+
+To watch what the Speaker hears and says, run `herdr plugin action invoke herdr-speak.log`. It opens a pane that follows the log; close the pane when you're done, and the Speaker keeps running. You can bind either action to a key in your Herdr config:
 
 ```toml
 [[keys.command]]
 key = "prefix+s"
 type = "plugin_action"
-command = "herdr-speak.start"
-description = "start speaker"
+command = "herdr-speak.log"
+description = "speaker log"
 ```
 
 ## Use
@@ -90,7 +92,7 @@ The Speaker works with any agent Herdr detects (`herdr agent start --help` lists
 
    If the agent has no skill support, make a custom command or saved prompt from the body of `SKILL.md`. As a last resort, paste the body into the session to turn speech on.
 3. **Find the toggle's name.** Many agents turn each skill into `/speak`. Others namespace it, as in `/herdr-speak:speak`, or use their own syntax, such as `$speak` or `/skill:speak`.
-4. **Test it.** Run the toggle, ask a short question, and listen. The Speaker pane logs every recap it speaks.
+4. **Test it.** Run the toggle, ask a short question, and listen. The Speaker log (`herdr-speak.log` action) shows every recap it speaks.
 
 If it works, please open a pull request that adds the agent to the install table.
 
@@ -111,11 +113,11 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 | `poll_seconds` | 2 | seconds between checks |
 | `announce` | `["machine", "workspace", "tab"]` | names to say before a recap from a different agent than the last one; `machine` applies to remote agents only, `[]` turns names off |
 
-`voice`, `rate`, and `announce` apply to the next recap. Restart the Speaker after changing the other keys.
+`voice`, `rate`, and `announce` apply to the next recap. Run the `herdr-speak.start` action to restart the Speaker after changing the other keys.
 
 **Voices.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
 
-**Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then restart the Speaker. The built-in compact voices work without it.
+**Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then restart Herdr, or run the `herdr-speak.start` action from a terminal opened after the grant. The built-in compact voices work without it.
 
 ## Limits
 

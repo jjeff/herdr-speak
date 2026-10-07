@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """herdr-speak speaker.
 
-Runs on YOUR machine (open it while Local is selected in Herdr). Polls agents on
-Local and on every enabled saved SSH machine. When an agent settles after
+Runs on YOUR machine: Herdr's startup hook launches it in the background with
+--background (see herdr-plugin.toml). Polls agents on Local and on every
+enabled saved SSH machine. When an agent settles after
 working, reads its recent output, finds the last line starting with the speaker
 emoji, and speaks it with macOS `say`.
 
 Config (optional): $HERDR_PLUGIN_CONFIG_DIR/config.json, see config.example.json.
+Log and lock: $HERDR_PLUGIN_STATE_DIR/speaker.log and speaker.lock.
+
+  speaker.py                 run in the foreground (development)
+  speaker.py --background    detach, log to speaker.log; no-op if one is running
+  speaker.py --restart       stop the running speaker first (combine with --background)
 """
 
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -22,6 +30,10 @@ HERDR = os.environ.get("HERDR_BIN_PATH") or shutil.which("herdr") or "herdr"
 CONFIG_DIR = os.environ.get(
     "HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herdr-speak")
 )
+STATE_DIR = os.environ.get("HERDR_PLUGIN_STATE_DIR", CONFIG_DIR)
+LOCK_PATH = os.path.join(STATE_DIR, "speaker.lock")
+LOG_PATH = os.path.join(STATE_DIR, "speaker.log")
+LOG_MAX_BYTES = 1_000_000
 MARKER = "\U0001F50A"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
 BOX_CHARS = "".join(map(chr, range(0x2500, 0x2580)))  # TUI borders, e.g. pi's ┃
@@ -165,7 +177,63 @@ def speak(text, cfg):
             "terminal app running Herdr (then restart the Speaker); see the README")
 
 
+def take_lock():
+    """Hold an exclusive lock for this process's lifetime, so Herdr's startup
+    hook (which reruns on server handoff) never starts a second speaker."""
+    os.makedirs(STATE_DIR, exist_ok=True)
+    f = open(LOCK_PATH, "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    f.seek(0)
+    f.truncate()
+    f.write(str(os.getpid()))
+    f.flush()
+    return f
+
+
+def stop_running():
+    try:
+        with open(LOCK_PATH) as f:
+            os.kill(int(f.read().strip()), signal.SIGTERM)
+    except (OSError, ValueError):
+        return  # nothing running
+    for _ in range(30):  # wait for its lock to free up
+        lock = take_lock()
+        if lock:
+            lock.close()
+            return
+        time.sleep(0.1)
+
+
+def detach():
+    if os.fork():
+        os._exit(0)  # parent: let Herdr's hook finish
+    os.setsid()  # leave the hook's process group so it isn't reaped with it
+    os.makedirs(STATE_DIR, exist_ok=True)
+    try:
+        if os.path.getsize(LOG_PATH) > LOG_MAX_BYTES:
+            os.truncate(LOG_PATH, 0)  # ponytail: no rotation, just start over
+    except OSError:
+        pass
+    out = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    null = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(null, 0)
+    os.dup2(out, 1)
+    os.dup2(out, 2)
+
+
 def main():
+    if "--restart" in sys.argv:
+        stop_running()
+    if "--background" in sys.argv:
+        detach()
+    lock = take_lock()  # noqa: F841 (held until exit)
+    if not lock:
+        log("already running")
+        return
     if not shutil.which("say"):
         log("`say` not found: run the speaker on your Mac, with Local selected.")
         sys.exit(1)
