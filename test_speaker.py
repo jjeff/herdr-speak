@@ -30,6 +30,11 @@ class ExtractRecap(unittest.TestCase):
         text = " 🔊 Grass is green.      ┃\n part two.   ┃\n─────────\n"
         self.assertEqual(speaker.extract_recap(text), "Grass is green. part two.")
 
+    def test_stops_at_hook_output(self):
+        # A Claude Code Stop hook prints right under the recap, with no blank line.
+        text = "● 🔊 The capital of Peru is Lima.\n  ⎿  Stop says: Turn finished\n"
+        self.assertEqual(speaker.extract_recap(text), "The capital of Peru is Lima.")
+
     def test_skips_quoted_instruction_text(self):
         self.assertIsNone(speaker.extract_recap("Reply with `🔊 Speech mode on.`"))
         self.assertIsNone(speaker.extract_recap('in the form "🔊 <recap>"'))

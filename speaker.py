@@ -57,6 +57,9 @@ WINDOWS_SPEAK = (
 )
 MARKER = "\U0001f50a"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
+# Lines an agent TUI starts with its own glyph (tool or hook output, prompts,
+# bullets) aren't part of a wrapped recap. ⎿ is Claude Code's hook/tool output.
+TUI_MARKS = "⎿●•◦❯›>▸○⏺▣✻✽✶"
 BOX_CHARS = "".join(map(chr, range(0x2500, 0x2580)))  # TUI borders, e.g. pi's ┃
 BUSY = {"working", "blocked"}
 SETTLED = {"idle", "done"}
@@ -216,7 +219,8 @@ def extract_recap(text):
             # continues on the following lines until a blank one.
             parts = [m.group(1)]
             for cont in lines[i + 1 :]:
-                if not cont.strip(BOX_CHARS + " \t"):
+                body = cont.strip(BOX_CHARS + " \t")
+                if not body or body[0] in TUI_MARKS:
                     break
                 parts.append(cont)
             text = " ".join(p.strip(BOX_CHARS + " \t") for p in parts)
