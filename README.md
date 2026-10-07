@@ -103,6 +103,18 @@ These Herdr actions control the Speaker. Run each with `herdr plugin action invo
 
 Antigravity, Gemini CLI, and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
 
+### Customize the recaps
+
+The toggle gives the agent default rules: one line, at most two short sentences, plain spoken English. Your own instructions win over them. Put lasting rules in the file your agent reads for instructions, such as `AGENTS.md` or `CLAUDE.md`:
+
+```md
+When speech mode is on, keep the 🔊 recap under ten words and always end with the next step.
+```
+
+For one session, add the rule after the toggle where the agent passes arguments, as in `/speak on, recap in French`.
+
+You can change length, tone, language, and content. Keep the recap on one line that starts with 🔊, because the Speaker reads only that line.
+
 ## Other agents
 
 The Speaker works with any agent Herdr detects (`herdr agent start --help` lists the kinds). The agent only needs a way to load the toggle in `skills/speak/SKILL.md`. To add one that isn't in the install table:

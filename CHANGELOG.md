@@ -7,6 +7,7 @@ All notable changes to herdr-speak. The format follows [Keep a Changelog](https:
 ### Added
 
 - A README recipe for OpenAI-compatible speech servers, such as VoiceStudio.
+- Your own instructions, such as AGENTS.md, CLAUDE.md, or text after the toggle, now win over the toggle's default recap rules. The README shows how to change recap length, tone, and language.
 
 ### Fixed
 
