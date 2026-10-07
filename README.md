@@ -7,6 +7,16 @@ herdr-speak has two halves, and both live in this repo:
 - **A `/speak` skill** (`skills/speak/SKILL.md`) for your coding agent. With speech on, the agent ends every reply with one line: `🔊 <spoken recap>`.
 - **A Herdr plugin** that runs a background "Speaker" on your Mac. Herdr starts it automatically. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
 
+## Why herdr-speak
+
+Other ways to hear from your agents solve a different problem:
+
+- **Herdr's own sounds and toasts** (`[ui.sound]`, `[ui.toast]`) tell you *that* an agent finished or needs input. They don't tell you what it did.
+- **A stop hook that pipes the reply into `say`** runs on the machine where the agent runs. On a remote SSH machine the audio plays in an empty room. It also reads a reply written for the screen, with its code, paths, and tables.
+- **Built-in voice modes** belong to one agent on one machine, and you set each one up separately.
+
+herdr-speak asks the agent for a one-line recap written to be heard, and plays it on the Mac in front of you, whichever machine and agent it came from. One `/speak` toggle works the same way in every supported agent, and with speech off it costs nothing.
+
 ## How it works
 
 ```

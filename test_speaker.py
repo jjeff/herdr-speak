@@ -39,9 +39,9 @@ class SourceName(unittest.TestCase):
         self.real_herdr = speaker.herdr
         lists = {
             "workspace": {"result": {"workspaces": [
-                {"workspace_id": "w1", "label": "missioncontrol", "active_tab_id": "w1:t9"}]}},
+                {"workspace_id": "w1", "label": "webapp", "active_tab_id": "w1:t9"}]}},
             "tab": {"result": {"tabs": [
-                {"tab_id": "w1:t2", "workspace_id": "w1", "label": "Visibox demo"}]}},
+                {"tab_id": "w1:t2", "workspace_id": "w1", "label": "Fix login bug"}]}},
         }
         speaker.herdr = lambda args, machine=None: json.dumps(lists[args[0]])
         self.agents = {"result": {"agents": [
@@ -51,14 +51,14 @@ class SourceName(unittest.TestCase):
         speaker.herdr = self.real_herdr
 
     def test_remote_names_machine_workspace_tab(self):
-        name = speaker.source_name(self.agents, "w1:p3", "id1", "mini1",
+        name = speaker.source_name(self.agents, "w1:p3", "id1", "studio",
                                    ["machine", "workspace", "tab"])
-        self.assertEqual(name, "mini1, missioncontrol, Visibox demo")
+        self.assertEqual(name, "studio, webapp, Fix login bug")
 
     def test_local_skips_machine(self):
         name = speaker.source_name(self.agents, "w1:p3", None, "local",
                                    ["machine", "tab"])
-        self.assertEqual(name, "Visibox demo")
+        self.assertEqual(name, "Fix login bug")
 
 
 class FindAgents(unittest.TestCase):

@@ -1,6 +1,6 @@
 id = "herdr-speak"
 name = "Herdr Speak"
-version = "0.1.0"
+version = "0.2.0"
 # Oldest version tested. Needs `--machine` API forwarding and `agent read --source recent-unwrapped`.
 min_herdr_version = "0.9.3"
 description = "Hear a short spoken recap when a coding agent finishes a turn, on Local and on saved SSH machines"
