@@ -31,15 +31,13 @@ import sys
 import time
 
 HERDR = os.environ.get("HERDR_BIN_PATH") or shutil.which("herdr") or "herdr"
-CONFIG_DIR = os.environ.get(
-    "HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herdr-speak")
-)
+CONFIG_DIR = os.environ.get("HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herdr-speak"))
 STATE_DIR = os.environ.get("HERDR_PLUGIN_STATE_DIR", CONFIG_DIR)
 LOCK_PATH = os.path.join(STATE_DIR, "speaker.lock")
 LOG_PATH = os.path.join(STATE_DIR, "speaker.log")
 MUTE_PATH = os.path.join(STATE_DIR, "muted")
 LOG_MAX_BYTES = 1_000_000
-MARKER = "\U0001F50A"  # 🔊
+MARKER = "\U0001f50a"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
 BOX_CHARS = "".join(map(chr, range(0x2500, 0x2580)))  # TUI borders, e.g. pi's ┃
 BUSY = {"working", "blocked"}
@@ -54,9 +52,15 @@ def log(msg):
 
 
 def load_config():
-    cfg = {"voice": None, "rate": 210, "include_local": True,
-           "machines": None, "poll_seconds": 2,
-           "announce": ["machine", "workspace", "tab"], "alert_blocked": True}
+    cfg = {
+        "voice": None,
+        "rate": 210,
+        "include_local": True,
+        "machines": None,
+        "poll_seconds": 2,
+        "announce": ["machine", "workspace", "tab"],
+        "alert_blocked": True,
+    }
     path = os.path.join(CONFIG_DIR, "config.json")
     try:
         with open(path) as f:
@@ -119,6 +123,31 @@ def find_agents(obj):
     return agents
 
 
+def classify(prev, status, seq, baseline=False):
+    """Decide what one poll of one pane means.
+
+    prev is the (status, completion_seq) remembered from the last poll, or None
+    for a pane not seen before. Returns (event, state): event is "finished",
+    "blocked", or None, and state is what to remember for the next poll.
+    """
+    prev_status, prev_seq = prev or (None, None)
+    # Herdr drops completion_seq while a pane is working; keep the last one.
+    state = (status, prev_seq if seq is None else seq)
+    if baseline:
+        return None, state  # don't replay what happened before startup
+    if prev_status is None:
+        # Herdr lists a new agent only once it detects it, which can be after
+        # its first turn (often the /speak toggle) has finished.
+        prev_status = "working" if seq is not None or status in SETTLED else status
+    if status == "blocked" and prev_status != "blocked":
+        return "blocked", state
+    # A changed completion_seq catches turns shorter than one poll; the status
+    # transition covers servers that don't report it.
+    if (seq is not None and seq != prev_seq) or (prev_status in BUSY and status in SETTLED):
+        return "finished", state
+    return None, state
+
+
 def source_name(agents_data, pane, machine, machine_label, parts):
     """Spoken name for a pane, built from cfg["announce"] parts in order:
     "machine" (remote panes only), "workspace", and "tab" labels."""
@@ -161,7 +190,7 @@ def extract_recap(text):
             # Agent TUIs hard-wrap long lines at the pane width, so the recap
             # continues on the following lines until a blank one.
             parts = [m.group(1)]
-            for cont in lines[i + 1:]:
+            for cont in lines[i + 1 :]:
                 if not cont.strip(BOX_CHARS + " \t"):
                     break
                 parts.append(cont)
@@ -190,8 +219,10 @@ def speak(text, cfg):
         log("(skipped)")
     elif rc != 0:
         # Most often: a Premium or Siri voice without Full Disk Access.
-        log("`say` failed: Premium and Siri voices need Full Disk Access for the "
-            "terminal app running Herdr (then restart the Speaker); see the README")
+        log(
+            "`say` failed: Premium and Siri voices need Full Disk Access for the "
+            "terminal app running Herdr (then restart the Speaker); see the README"
+        )
 
 
 def take_lock():
@@ -302,8 +333,8 @@ def main():
     cfg = load_config()
     wake = wake_pipe()
     log(f"herdr-speak listening (herdr: {HERDR})")
-    last_seen = {}     # (machine, pane) -> (status, completion_seq)
-    last_spoken = {}   # (machine, pane) -> hash of last recap spoken
+    last_seen = {}  # (machine, pane) -> (status, completion_seq)
+    last_spoken = {}  # (machine, pane) -> hash of last recap spoken
     baselined = set()  # machines whose agents were listed at least once
     last_source = None  # (machine, pane) of the last recap spoken
     machines, refreshed = {}, 0.0
@@ -324,30 +355,23 @@ def main():
             baselined.add(machine)
             for pane, (st, seq) in find_agents(data).items():
                 key = (machine, pane)
-                prev, prev_seq = last_seen.get(key, (None, None))
-                # Herdr drops completion_seq while a pane is working; keep the last one.
-                last_seen[key] = (st, prev_seq if seq is None else seq)
-                if first_listing:
-                    continue  # baseline: don't replay recaps from before startup
-                if prev is None:
-                    # Herdr lists a new agent only once it detects it, which can be
-                    # after its first turn (often the /speak toggle) has finished.
-                    prev = "working" if seq is not None or st in SETTLED else st
-                if st == "blocked" and prev != "blocked":
+                event, last_seen[key] = classify(last_seen.get(key), st, seq, first_listing)
+                if event == "blocked":
                     live = load_config()
                     if live.get("alert_blocked", True):
                         # No recap to read: the agent stopped to ask. Always name it.
-                        name = source_name(data, pane, machine, label,
-                                           live.get("announce") or []) or "An agent"
+                        name = (
+                            source_name(data, pane, machine, label, live.get("announce") or []) or "An agent"
+                        )
                         last_source = key
                         log(f"[{label} {pane}] {name} needs you.")
                         speak(f"{name} needs you.", live)
                     continue
-                # A changed completion_seq catches turns shorter than one poll;
-                # the status transition covers servers that don't report it.
-                if (seq is not None and seq != prev_seq) or (prev in BUSY and st in SETTLED):
-                    out = herdr(["agent", "read", pane, "--source",
-                                 "recent-unwrapped", "--lines", READ_LINES], machine)
+                if event == "finished":
+                    out = herdr(
+                        ["agent", "read", pane, "--source", "recent-unwrapped", "--lines", READ_LINES],
+                        machine,
+                    )
                     recap = extract_recap(out)
                     if not recap:
                         continue

@@ -1,0 +1,22 @@
+name: Support another agent
+description: Ask for herdr-speak to support a coding agent that isn't in the install table.
+labels: [agent]
+body:
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and version
+    validations:
+      required: true
+  - type: dropdown
+    id: detected
+    attributes:
+      label: Does `herdr agent list` show the agent's pane?
+      options: ["Yes", "No", "Not sure"]
+    validations:
+      required: true
+  - type: textarea
+    id: skills
+    attributes:
+      label: How does the agent load skills or custom commands?
+      description: Links to its docs help most.

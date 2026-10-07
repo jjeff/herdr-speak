@@ -1,0 +1,7 @@
+# Tool settings only. herdr-speak has no dependencies and isn't packaged.
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

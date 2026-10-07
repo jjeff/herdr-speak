@@ -1,0 +1,30 @@
+name: Bug report
+description: Something isn't spoken, is spoken wrong, or the Speaker misbehaves.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `herdr --version`, and the herdr-speak version from herdr-plugin.toml.
+    validations:
+      required: true
+  - type: input
+    id: setup
+    attributes:
+      label: Agent and machine
+      description: For example "Codex 0.161 on a remote Linux machine, Speaker on macOS 26".
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Speaker log
+      description: The relevant lines from `herdr plugin action invoke herdr-speak.log`.
+      render: text
