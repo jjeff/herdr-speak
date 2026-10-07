@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/logo.png" alt="A ram with a speech bubble saying herdr-speak" width="240"></p>
+<p align="center"><img src="assets/herdr-speak-logo.png" alt="A ram with a speech bubble saying herdr-speak" width="240"></p>
 
 # herdr-speak
 
