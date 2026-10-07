@@ -3,5 +3,6 @@
   "rate": 210,
   "include_local": true,
   "machines": null,
-  "poll_seconds": 2
+  "poll_seconds": 2,
+  "announce": ["machine", "workspace", "tab"]
 }

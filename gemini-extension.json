@@ -1,5 +1,5 @@
 {
   "name": "herdr-speak",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Adds /speak: the agent ends each reply with a one-line spoken recap that the herdr-speak Herdr plugin reads aloud."
 }

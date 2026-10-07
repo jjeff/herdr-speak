@@ -1,5 +1,6 @@
 """Run with: python3 -m unittest"""
 
+import json
 import unittest
 
 import speaker
@@ -31,6 +32,33 @@ class ExtractRecap(unittest.TestCase):
     def test_no_recap(self):
         self.assertIsNone(speaker.extract_recap("no marker here"))
         self.assertIsNone(speaker.extract_recap(None))
+
+
+class SourceName(unittest.TestCase):
+    def setUp(self):
+        self.real_herdr = speaker.herdr
+        lists = {
+            "workspace": {"result": {"workspaces": [
+                {"workspace_id": "w1", "label": "webapp", "active_tab_id": "w1:t9"}]}},
+            "tab": {"result": {"tabs": [
+                {"tab_id": "w1:t2", "workspace_id": "w1", "label": "Fix login bug"}]}},
+        }
+        speaker.herdr = lambda args, machine=None: json.dumps(lists[args[0]])
+        self.agents = {"result": {"agents": [
+            {"pane_id": "w1:p3", "tab_id": "w1:t2", "workspace_id": "w1", "agent_status": "done"}]}}
+
+    def tearDown(self):
+        speaker.herdr = self.real_herdr
+
+    def test_remote_names_machine_workspace_tab(self):
+        name = speaker.source_name(self.agents, "w1:p3", "id1", "studio",
+                                   ["machine", "workspace", "tab"])
+        self.assertEqual(name, "studio, webapp, Fix login bug")
+
+    def test_local_skips_machine(self):
+        name = speaker.source_name(self.agents, "w1:p3", None, "local",
+                                   ["machine", "tab"])
+        self.assertEqual(name, "Fix login bug")
 
 
 class FindAgents(unittest.TestCase):

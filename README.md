@@ -5,14 +5,24 @@ Hear a short spoken recap when a coding agent (Claude Code, Codex, Antigravity, 
 herdr-speak has two halves, and both live in this repo:
 
 - **A `/speak` skill** (`skills/speak/SKILL.md`) for your coding agent. With speech on, the agent ends every reply with one line: `🔊 <spoken recap>`.
-- **A Herdr plugin** that runs a small "Speaker" pane on your Mac. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
+- **A Herdr plugin** that runs a background "Speaker" on your Mac. Herdr starts it automatically. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
+
+## Why herdr-speak
+
+Other ways to hear from your agents solve a different problem:
+
+- **Herdr's own sounds and toasts** (`[ui.sound]`, `[ui.toast]`) tell you *that* an agent finished or needs input. They don't tell you what it did.
+- **A stop hook that pipes the reply into `say`** runs on the machine where the agent runs. On a remote SSH machine the audio plays in an empty room. It also reads a reply written for the screen, with its code, paths, and tables.
+- **Built-in voice modes** belong to one agent on one machine, and you set each one up separately.
+
+herdr-speak asks the agent for a one-line recap written to be heard, and plays it on the Mac in front of you, whichever machine and agent it came from. One `/speak` toggle works the same way in every supported agent, and with speech off it costs nothing.
 
 ## How it works
 
 ```
  Remote machine                            Your Mac (Herdr "Local")
  ──────────────                            ────────────────────────
- Agent session                             Speaker pane (speaker.py)
+ Agent session                             Speaker (speaker.py, background)
    /speak  → ends every reply with           polls `herdr --machine X agent list`
    "🔊 <one-line spoken recap>"              sees a turn finish
                                              `herdr --machine X agent read <pane>`
@@ -20,7 +30,7 @@ herdr-speak has two halves, and both live in this repo:
 ```
 
 - **One switch per session.** Run `/speak` or `/speak off` inside the agent. With speech off, the agent writes no recap, so it costs nothing and nothing is spoken.
-- **Audio plays where you are.** Herdr runs a plugin pane on the server that owns it, so open the Speaker while **Local** is selected. It reaches remote machines through `herdr --machine`.
+- **Audio plays where you are.** Install the Herdr plugin only on your Mac. The Speaker runs there and reaches remote machines through `herdr --machine`.
 - **The 🔊 line stays on screen,** so you can read along.
 
 ## Requirements
@@ -53,20 +63,22 @@ Restart the agent after installing. Add `on` or `off` after the toggle; on is th
 
 **3. Add each remote machine to Herdr** if you haven't already: `herdr machine add <host>`.
 
-**4. Start the Speaker.** Select **Local** in Herdr, then run:
+**4. Start the Speaker.** Herdr starts it in the background every time Herdr starts. To start it now without restarting Herdr, run:
 
 ```sh
 herdr plugin action invoke herdr-speak.start
 ```
 
-You can also bind it to a key in your Herdr config:
+That action also restarts a running Speaker. Only one copy ever runs.
+
+To watch what the Speaker hears and says, run `herdr plugin action invoke herdr-speak.log`. It opens a pane that follows the log; close the pane when you're done, and the Speaker keeps running. You can bind either action to a key in your Herdr config:
 
 ```toml
 [[keys.command]]
 key = "prefix+s"
 type = "plugin_action"
-command = "herdr-speak.start"
-description = "start speaker"
+command = "herdr-speak.log"
+description = "speaker log"
 ```
 
 ## Use
@@ -90,7 +102,7 @@ The Speaker works with any agent Herdr detects (`herdr agent start --help` lists
 
    If the agent has no skill support, make a custom command or saved prompt from the body of `SKILL.md`. As a last resort, paste the body into the session to turn speech on.
 3. **Find the toggle's name.** Many agents turn each skill into `/speak`. Others namespace it, as in `/herdr-speak:speak`, or use their own syntax, such as `$speak` or `/skill:speak`.
-4. **Test it.** Run the toggle, ask a short question, and listen. The Speaker pane logs every recap it speaks.
+4. **Test it.** Run the toggle, ask a short question, and listen. The Speaker log (`herdr-speak.log` action) shows every recap it speaks.
 
 If it works, please open a pull request that adds the agent to the install table.
 
@@ -109,15 +121,17 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 | `include_local` | true | also watch agents on Local |
 | `machines` | all enabled | list of machine ids or labels to watch |
 | `poll_seconds` | 2 | seconds between checks |
+| `announce` | `["machine", "workspace", "tab"]` | names to say before a recap from a different agent than the last one; `machine` applies to remote agents only, `[]` turns names off |
 
-`voice` and `rate` apply to the next recap. Restart the Speaker after changing the other keys.
+`voice`, `rate`, and `announce` apply to the next recap. Run the `herdr-speak.start` action to restart the Speaker after changing the other keys.
 
 **Voices.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
 
-**Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then restart the Speaker. The built-in compact voices work without it.
+**Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then quit and restart Herdr. The Speaker inherits Herdr's access, and only processes started after the grant get it. The built-in compact voices work without it.
 
 ## Limits
 
+- **Recaps play one at a time.** When several agents finish together, each recap waits for the one before it, and starts with the agent's name.
 - **Only the latest recap is spoken.** If a session finishes several turns between two polls, you hear the last one.
 - **Polling is sequential.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
 - **Hermes recaps aren't spoken yet.** The toggle works, but Herdr 0.9.3 doesn't list Hermes v0.21 panes in `herdr agent list`, so the Speaker never sees their turns finish.
@@ -141,6 +155,23 @@ python3 -m unittest
 ```
 
 For Hermes, add the checkout's `skills` directory to `skills.external_dirs` in `~/.hermes/config.yaml`.
+
+## Alternatives
+
+If you don't use Herdr, or you only want speech from one agent on one machine, one of these may suit you better. Listed as of October 2026; descriptions are from each project's README.
+
+| project | agents | how it speaks |
+|---|---|---|
+| [blacktop/mcp-tts](https://github.com/blacktop/mcp-tts) | any MCP host, including Claude Code, Codex, and Gemini CLI | An MCP server the agent calls to speak, with macOS `say`, ElevenLabs, OpenAI, and local voices |
+| [kyleoliveiro/claude-speak](https://github.com/kyleoliveiro/claude-speak) | Claude Code | A stop hook summarizes each reply in one line and speaks it with Kokoro, a local model |
+| [hopchouinard/claude-speak](https://github.com/hopchouinard/claude-speak) | Claude Code | Spoken summaries each turn, plus a mode where Claude speaks mid-turn; OpenAI or ElevenLabs voices |
+| [ybouhjira/claude-code-tts](https://github.com/ybouhjira/claude-code-tts) | Claude Code | An MCP plugin with a stop hook that speaks the first sentence of each reply with OpenAI TTS |
+| [cris-m/claude_voice](https://github.com/cris-m/claude_voice) | Claude Code | Speaks replies, notifications, and command completions with local voice models |
+| [silverdolphin863/claude-speak](https://github.com/silverdolphin863/claude-speak) | Claude Code | Speaks replies with Microsoft neural voices through edge-tts, no API key |
+| [melderan/claude-code-tts](https://github.com/melderan/claude-code-tts) | Claude Code | A stop hook that speaks new reply text with Piper, a local model |
+| [praneybehl/claude-code-voice-hook](https://github.com/praneybehl/claude-code-voice-hook) | Claude Code | A stop hook that sends each reply to a local OpenAI-compatible TTS server |
+
+Know another one? Open a pull request.
 
 ## License
 
