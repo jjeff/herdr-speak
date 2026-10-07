@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "herdr-speak",
+  "description": "Spoken turn recaps for Claude Code sessions running in Herdr.",
+  "owner": {
+    "name": "Jeff Robbins",
+    "url": "https://github.com/jjeff"
+  },
+  "plugins": [
+    {
+      "name": "herdr-speak",
+      "description": "Adds /speak: Claude ends each reply with a one-line spoken recap that the herdr-speak Herdr plugin reads aloud.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

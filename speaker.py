@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""herder-speak speaker.
+"""herdr-speak speaker.
 
 Runs on YOUR machine (open it while Local is selected in Herdr). Polls agents on
 Local and on every enabled saved SSH machine. When an agent settles after
@@ -20,7 +20,7 @@ import time
 
 HERDR = os.environ.get("HERDR_BIN_PATH") or shutil.which("herdr") or "herdr"
 CONFIG_DIR = os.environ.get(
-    "HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herder-speak")
+    "HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herdr-speak")
 )
 MARKER = "\U0001F50A"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
@@ -137,7 +137,7 @@ def main():
         log("`say` not found: run the speaker on your Mac, with Local selected.")
         sys.exit(1)
     cfg = load_config()
-    log(f"herder-speak listening (herdr: {HERDR})")
+    log(f"herdr-speak listening (herdr: {HERDR})")
     last_seen = {}     # (machine, pane) -> (status, completion_seq)
     last_spoken = {}   # (machine, pane) -> hash of last recap spoken
     machines, refreshed = {}, 0.0

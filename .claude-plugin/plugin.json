@@ -1,0 +1,11 @@
+{
+  "name": "herdr-speak",
+  "version": "0.1.0",
+  "description": "Adds /speak: Claude ends each reply with a one-line spoken recap that the herdr-speak Herdr plugin reads aloud.",
+  "author": {
+    "name": "Jeff Robbins",
+    "url": "https://github.com/jjeff"
+  },
+  "homepage": "https://github.com/jjeff/herdr-speak",
+  "license": "MIT"
+}
