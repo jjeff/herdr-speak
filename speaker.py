@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""herder-speak speaker.
+"""herdr-speak speaker.
 
 Runs on YOUR machine (open it while Local is selected in Herdr). Polls agents on
 Local and on every enabled saved SSH machine. When an agent settles after
@@ -20,7 +20,7 @@ import time
 
 HERDR = os.environ.get("HERDR_BIN_PATH") or shutil.which("herdr") or "herdr"
 CONFIG_DIR = os.environ.get(
-    "HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herder-speak")
+    "HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herdr-speak")
 )
 MARKER = "\U0001F50A"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
@@ -87,13 +87,16 @@ def status_of(d):
 
 
 def find_agents(obj):
-    """Defensive: return {pane_id: status} for any dict that looks like an agent."""
+    """Defensive: return {pane_id: (status, completion_seq)} for any dict that
+    looks like an agent. completion_seq is None when Herdr doesn't report it
+    (older servers, a pane that is working, or one that never finished a turn)."""
     agents = {}
     for d in walk(obj):
         pane = d.get("pane_id") or d.get("pane")
         st = status_of(d)
         if isinstance(pane, str) and st:
-            agents[pane] = st
+            seq = d.get("completion_seq")
+            agents[pane] = (st, seq if isinstance(seq, int) else None)
     return agents
 
 
@@ -126,7 +129,10 @@ def speak(text, cfg):
         cmd += ["-v", cfg["voice"]]
     if cfg.get("rate"):
         cmd += ["-r", str(cfg["rate"])]
-    subprocess.run(cmd + [text])
+    if subprocess.run(cmd + [text]).returncode != 0:
+        # Most often: a Premium or Siri voice without Full Disk Access.
+        log("`say` failed: Premium and Siri voices need Full Disk Access for the "
+            "terminal app running Herdr (then restart the Speaker); see the README")
 
 
 def main():
@@ -134,8 +140,8 @@ def main():
         log("`say` not found: run the speaker on your Mac, with Local selected.")
         sys.exit(1)
     cfg = load_config()
-    log(f"herder-speak listening (herdr: {HERDR})")
-    last_status = {}   # (machine, pane) -> status
+    log(f"herdr-speak listening (herdr: {HERDR})")
+    last_seen = {}     # (machine, pane) -> (status, completion_seq)
     last_spoken = {}   # (machine, pane) -> hash of last recap spoken
     machines, refreshed = {}, 0.0
 
@@ -149,13 +155,16 @@ def main():
         targets = ([(None, "local")] if cfg["include_local"] else []) + list(machines.items())
         for machine, label in targets:
             agents = find_agents(parse_json(herdr(["agent", "list"], machine)))
-            for pane, st in agents.items():
+            for pane, (st, seq) in agents.items():
                 key = (machine, pane)
-                prev = last_status.get(key)
-                last_status[key] = st
-                if prev is None or prev == st:
-                    continue  # baseline or no change
-                if prev in BUSY and st in SETTLED:
+                prev, prev_seq = last_seen.get(key, (None, None))
+                # Herdr drops completion_seq while a pane is working; keep the last one.
+                last_seen[key] = (st, prev_seq if seq is None else seq)
+                if prev is None:
+                    continue  # baseline
+                # A changed completion_seq catches turns shorter than one poll;
+                # the status transition covers servers that don't report it.
+                if (seq is not None and seq != prev_seq) or (prev in BUSY and st in SETTLED):
                     out = herdr(["agent", "read", pane, "--source",
                                  "recent-unwrapped", "--lines", READ_LINES], machine)
                     recap = extract_recap(out)
@@ -166,7 +175,7 @@ def main():
                         continue  # already said this one
                     last_spoken[key] = h
                     log(f"[{label} {pane}] {MARKER} {recap}")
-                    speak(recap, cfg)
+                    speak(recap, load_config())  # re-read so voice/rate edits apply live
 
         time.sleep(float(cfg.get("poll_seconds", 2)))
 

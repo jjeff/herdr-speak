@@ -1,72 +1,110 @@
-# herder-speak
+# herdr-speak
 
-Hear a short spoken recap when Claude Code finishes a turn. This works even when Claude Code is running on a remote machine you reach through [Herdr](https://herdr.dev).
+Hear a short spoken recap when a Claude Code session finishes a turn, even when that session runs on another machine you reach through [Herdr](https://herdr.dev).
+
+herdr-speak has two halves, and both live in this repo:
+
+- **A Claude Code plugin** that adds `/speak`. With speech on, Claude ends every reply with one line: `🔊 <spoken recap>`.
+- **A Herdr plugin** that runs a small "Speaker" pane on your Mac. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
 
 ## How it works
 
 ```
- Mac mini (remote)                         Your laptop (Local)
- ─────────────────                         ───────────────────
- Claude Code session                       Herdr "speaker" pane (speaker.py)
-   /speak on  → ends every reply with        polls `herdr --machine X agent list`
-   "🔊 <one-line spoken recap>"              agent goes working → done
+ Remote machine                            Your Mac (Herdr "Local")
+ ──────────────                            ────────────────────────
+ Claude Code session                       Speaker pane (speaker.py)
+   /speak  → ends every reply with           polls `herdr --machine X agent list`
+   "🔊 <one-line spoken recap>"              sees a turn finish
                                              `herdr --machine X agent read <pane>`
-                                             finds last 🔊 line → `say`
+                                             finds the last 🔊 line → `say`
 ```
 
-- **One switch, per session:** `/speak` / `/speak off` inside Claude Code. When it's off, Claude generates no recap, so there's no extra latency and nothing gets spoken.
-- **Audio plays where you are.** Herdr plugins run on the server that owns the pane, so the speaker must be opened while **Local** is selected. It then reaches remote machines through `--machine`.
-- **The 🔊 line is visible on screen,** so you can read along while it speaks.
+- **One switch per session.** Run `/speak` or `/speak off` inside Claude Code. With speech off, Claude writes no recap, so it costs nothing and nothing is spoken.
+- **Audio plays where you are.** Herdr runs a plugin pane on the server that owns it, so open the Speaker while **Local** is selected. It reaches remote machines through `herdr --machine`.
+- **The 🔊 line stays on screen,** so you can read along.
+
+## Requirements
+
+- macOS on the machine where you listen (`say` and `python3` ship with it).
+- Herdr 0.9.3 or newer on every machine.
+- Claude Code on every machine that runs sessions.
 
 ## Install
 
-**1. On each machine that runs Claude Code** (the Mac minis):
+**1. On your Mac, install the Herdr plugin:**
 
 ```sh
-mkdir -p ~/.claude/commands
-cp claude/commands/speak.md ~/.claude/commands/
+herdr plugin install jjeff/herdr-speak
 ```
 
-**2. On your laptop:**
+**2. On every machine that runs Claude Code** (your Mac included, if you run sessions there), install the Claude Code plugin:
 
 ```sh
-herdr plugin link /path/to/herder-speak/herdr-plugin
-# optional config
-cp herdr-plugin/config.example.json "$(herdr plugin config-dir herder-speak)/config.json"
+claude plugin marketplace add jjeff/herdr-speak
+claude plugin install herdr-speak@herdr-speak
 ```
 
-Make sure each Mac mini is a saved machine (`herdr machine add <host>`). Then, with **Local** selected:
+**3. Add each remote machine to Herdr** if you haven't already: `herdr machine add <host>`.
+
+**4. Start the Speaker.** Select **Local** in Herdr, then run:
 
 ```sh
-herdr plugin action invoke herder-speak.start
+herdr plugin action invoke herdr-speak.start
 ```
 
-Optional keybinding in your Herdr config:
+You can also bind it to a key in your Herdr config:
 
 ```toml
 [[keys.command]]
 key = "prefix+s"
 type = "plugin_action"
-command = "herder-speak.start"
+command = "herdr-speak.start"
 description = "start speaker"
 ```
 
 ## Use
 
-In any Claude Code session, run `/speak` to turn speech on. You should hear "Speech mode on." Run `/speak off` to stop.
+In any Claude Code session, run `/speak` (its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Run `/speak off` to stop.
 
-## Config (`config.json` in the plugin config dir)
+## Configure
+
+Create `config.json` in the plugin's config directory:
+
+```sh
+cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
+```
 
 | key | default | meaning |
 |---|---|---|
-| `voice` | system default | `say -v` voice (`say -v '?'` lists them) |
+| `voice` | system voice | a `say -v` voice name; `say -v '?'` lists them |
 | `rate` | 210 | words per minute |
 | `include_local` | true | also watch agents on Local |
-| `machines` | all enabled | list of machine IDs/labels to watch |
-| `poll_seconds` | 2 | how often to check agent state |
+| `machines` | all enabled | list of machine ids or labels to watch |
+| `poll_seconds` | 2 | seconds between checks |
 
-## Unverified assumptions (check first)
+`voice` and `rate` apply to the next recap. Restart the Speaker after changing the other keys.
 
-- **JSON shape.** The `agent list` and `machine list --json` output is parsed defensively, by looking for `pane_id` plus a `status`/`state` key. Run `herdr --machine <label> agent list` once to confirm.
-- **Turn detection.** A turn is recognised by the `working → done/idle` transition seen on a 2-second poll. A turn shorter than one poll interval could be missed.
-- **`min_herdr_version`** is a guess. Remote forwarding needs a recent Herdr on both ends.
+**Voices.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
+
+**Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then restart the Speaker. The built-in compact voices work without it.
+
+## Limits
+
+- **Only the latest recap is spoken.** If a session finishes several turns between two polls, you hear the last one.
+- **Polling is sequential.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
+- **Detection uses Herdr's `completion_seq`** to catch turns shorter than one poll. Older servers that don't report it fall back to watching `working` → `done`/`idle`, which can miss a very short turn.
+
+## Development
+
+Link your checkout instead of installing:
+
+```sh
+herdr plugin link .
+claude plugin marketplace add ./
+claude plugin install herdr-speak@herdr-speak
+python3 -m unittest
+```
+
+## License
+
+MIT

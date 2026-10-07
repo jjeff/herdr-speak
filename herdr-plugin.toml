@@ -1,12 +1,12 @@
-id = "herder-speak"
-name = "Herder Speak"
+id = "herdr-speak"
+name = "Herdr Speak"
 version = "0.1.0"
-# Guess: needs a Herdr with `--machine` API forwarding. Adjust if link refuses.
-min_herdr_version = "0.9.0"
-description = "Speak Claude Code's 🔊 recap lines aloud on this machine, across Local and saved SSH machines"
+# Oldest version tested. Needs `--machine` API forwarding and `agent read --source recent-unwrapped`.
+min_herdr_version = "0.9.3"
+description = "Hear a short spoken recap when a Claude Code session finishes a turn, on Local and on saved SSH machines"
 platforms = ["macos"]
 
-# Long-running listener. Open it while LOCAL is selected so it runs on your laptop.
+# Long-running listener. Open it while LOCAL is selected so it runs on your Mac.
 [[panes]]
 id = "speaker"
 title = "Speaker"
@@ -17,4 +17,4 @@ command = ["python3", "speaker.py"]
 id = "start"
 title = "Start speaker"
 contexts = ["workspace"]
-command = ["sh", "-c", "\"$HERDR_BIN_PATH\" plugin pane open --plugin herder-speak --entrypoint speaker --placement split --no-focus"]
+command = ["sh", "-c", "\"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint speaker --placement split --no-focus"]
