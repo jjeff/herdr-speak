@@ -75,6 +75,25 @@ In any agent session, run the toggle from the table above (in Claude Code its fu
 
 Antigravity, Gemini CLI, and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
 
+## Other agents
+
+The Speaker works with any agent Herdr detects (`herdr agent start --help` lists the kinds). The agent only needs a way to load the toggle in `skills/speak/SKILL.md`. To add one that isn't in the install table:
+
+1. **Check that Herdr detects it.** Start the agent in a Herdr pane, then run `herdr agent list`. The pane must appear with an `agent_status`. If it doesn't, the Speaker can't hear that agent.
+2. **Load the skill.** Most agents now read [Agent Skills](https://agentskills.io). Clone this repo, then link the skill into the agent's skills directory. Many agents read `~/.agents/skills`:
+
+   ```sh
+   git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak
+   mkdir -p ~/.agents/skills
+   ln -s ~/.herdr-speak/skills/speak ~/.agents/skills/speak
+   ```
+
+   If the agent has no skill support, make a custom command or saved prompt from the body of `SKILL.md`. As a last resort, paste the body into the session to turn speech on.
+3. **Find the toggle's name.** Many agents turn each skill into `/speak`. Others namespace it, as in `/herdr-speak:speak`, or use their own syntax, such as `$speak` or `/skill:speak`.
+4. **Test it.** Run the toggle, ask a short question, and listen. The Speaker pane logs every recap it speaks.
+
+If it works, please open a pull request that adds the agent to the install table.
+
 ## Configure
 
 Create `config.json` in the plugin's config directory:

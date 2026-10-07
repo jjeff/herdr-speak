@@ -26,3 +26,12 @@ Test a host end to end through Herdr, with the Speaker running on Local:
 5. Close the test tab.
 
 Some hosts need a model flag after `--`, for example `herdr agent start t --kind opencode --pane <p> -- --model <provider/model>`.
+
+## Adding a host
+
+Herdr supports more agents than this repo packages. Add one only when someone needs it:
+
+1. Read the host's current docs for skill discovery paths, plugin or extension manifests, and how a user invokes a skill and passes arguments. Hosts rename and replace themselves often; Gemini CLI became Antigravity mid-2026.
+2. Prefer zero new files. A host that finds `skills/` in an installed package, or reads `~/.agents/skills`, needs only a README row. Add a manifest only when the host requires one, and keep the toggle text in `SKILL.md`.
+3. Run the live test recipe above. Confirm that `herdr agent list` shows the pane. Hermes v0.21 is not listed by Herdr 0.9.3, so its recaps are never spoken.
+4. Add the host to the README install table with its exact toggle syntax.
