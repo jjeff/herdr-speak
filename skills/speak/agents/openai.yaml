@@ -1,0 +1,3 @@
+# Codex: only run when the user invokes $speak explicitly.
+policy:
+  allow_implicit_invocation: false

@@ -24,6 +24,7 @@ CONFIG_DIR = os.environ.get(
 )
 MARKER = "\U0001F50A"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
+BOX_CHARS = "".join(map(chr, range(0x2500, 0x2580)))  # TUI borders, e.g. pi's ┃
 BUSY = {"working", "blocked"}
 SETTLED = {"idle", "done"}
 READ_LINES = "150"
@@ -114,12 +115,22 @@ def list_machines(cfg):
 
 
 def extract_recap(text):
-    for line in reversed((text or "").splitlines()):
+    lines = (text or "").splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i]
         if MARKER not in line or f'"{MARKER}' in line or f"`{MARKER}" in line:
             continue  # skip quoted instruction text
         m = RECAP_RE.search(line)
-        if m and m.group(1):
-            return m.group(1)
+        if m and m.group(1) and not m.group(1).startswith("<"):  # "<spoken recap>" template
+            # Agent TUIs hard-wrap long lines at the pane width, so the recap
+            # continues on the following lines until a blank one.
+            parts = [m.group(1)]
+            for cont in lines[i + 1:]:
+                if not cont.strip(BOX_CHARS + " \t"):
+                    break
+                parts.append(cont)
+            text = " ".join(p.strip(BOX_CHARS + " \t") for p in parts)
+            return text or None
     return None
 
 
@@ -143,6 +154,7 @@ def main():
     log(f"herdr-speak listening (herdr: {HERDR})")
     last_seen = {}     # (machine, pane) -> (status, completion_seq)
     last_spoken = {}   # (machine, pane) -> hash of last recap spoken
+    baselined = set()  # machines whose agents were listed at least once
     machines, refreshed = {}, 0.0
 
     while True:
@@ -154,14 +166,22 @@ def main():
 
         targets = ([(None, "local")] if cfg["include_local"] else []) + list(machines.items())
         for machine, label in targets:
-            agents = find_agents(parse_json(herdr(["agent", "list"], machine)))
-            for pane, (st, seq) in agents.items():
+            data = parse_json(herdr(["agent", "list"], machine))
+            if data is None:
+                continue  # unreachable; baseline it once it answers
+            first_listing = machine not in baselined
+            baselined.add(machine)
+            for pane, (st, seq) in find_agents(data).items():
                 key = (machine, pane)
                 prev, prev_seq = last_seen.get(key, (None, None))
                 # Herdr drops completion_seq while a pane is working; keep the last one.
                 last_seen[key] = (st, prev_seq if seq is None else seq)
+                if first_listing:
+                    continue  # baseline: don't replay recaps from before startup
                 if prev is None:
-                    continue  # baseline
+                    # Herdr lists a new agent only once it detects it, which can be
+                    # after its first turn (often the /speak toggle) has finished.
+                    prev = "working" if seq is not None or st in SETTLED else st
                 # A changed completion_seq catches turns shorter than one poll;
                 # the status transition covers servers that don't report it.
                 if (seq is not None and seq != prev_seq) or (prev in BUSY and st in SETTLED):

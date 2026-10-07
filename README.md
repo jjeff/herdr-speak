@@ -1,10 +1,10 @@
 # herdr-speak
 
-Hear a short spoken recap when a Claude Code session finishes a turn, even when that session runs on another machine you reach through [Herdr](https://herdr.dev).
+Hear a short spoken recap when a coding agent (Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, or Hermes) finishes a turn, even when that session runs on another machine you reach through [Herdr](https://herdr.dev).
 
 herdr-speak has two halves, and both live in this repo:
 
-- **A Claude Code plugin** that adds `/speak`. With speech on, Claude ends every reply with one line: `🔊 <spoken recap>`.
+- **A `/speak` skill** (`skills/speak/SKILL.md`) for your coding agent. With speech on, the agent ends every reply with one line: `🔊 <spoken recap>`.
 - **A Herdr plugin** that runs a small "Speaker" pane on your Mac. It watches agents on Local and on your saved SSH machines, and reads each new 🔊 line aloud with macOS `say`.
 
 ## How it works
@@ -12,14 +12,14 @@ herdr-speak has two halves, and both live in this repo:
 ```
  Remote machine                            Your Mac (Herdr "Local")
  ──────────────                            ────────────────────────
- Claude Code session                       Speaker pane (speaker.py)
+ Agent session                             Speaker pane (speaker.py)
    /speak  → ends every reply with           polls `herdr --machine X agent list`
    "🔊 <one-line spoken recap>"              sees a turn finish
                                              `herdr --machine X agent read <pane>`
                                              finds the last 🔊 line → `say`
 ```
 
-- **One switch per session.** Run `/speak` or `/speak off` inside Claude Code. With speech off, Claude writes no recap, so it costs nothing and nothing is spoken.
+- **One switch per session.** Run `/speak` or `/speak off` inside the agent. With speech off, the agent writes no recap, so it costs nothing and nothing is spoken.
 - **Audio plays where you are.** Herdr runs a plugin pane on the server that owns it, so open the Speaker while **Local** is selected. It reaches remote machines through `herdr --machine`.
 - **The 🔊 line stays on screen,** so you can read along.
 
@@ -27,7 +27,7 @@ herdr-speak has two halves, and both live in this repo:
 
 - macOS on the machine where you listen (`say` and `python3` ship with it).
 - Herdr 0.9.3 or newer on every machine.
-- Claude Code on every machine that runs sessions.
+- A supported agent on every machine that runs sessions: Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, or Hermes.
 
 ## Install
 
@@ -37,12 +37,19 @@ herdr-speak has two halves, and both live in this repo:
 herdr plugin install jjeff/herdr-speak
 ```
 
-**2. On every machine that runs Claude Code** (your Mac included, if you run sessions there), install the Claude Code plugin:
+**2. On every machine that runs agents** (your Mac included, if you run sessions there), install the `/speak` skill for each agent you use:
 
-```sh
-claude plugin marketplace add jjeff/herdr-speak
-claude plugin install herdr-speak@herdr-speak
-```
+| agent | install | toggle |
+|---|---|---|
+| Claude Code | `claude plugin marketplace add jjeff/herdr-speak`<br>`claude plugin install herdr-speak@herdr-speak` | `/speak` |
+| Codex | `codex plugin marketplace add jjeff/herdr-speak`<br>`codex plugin add herdr-speak@herdr-speak` | `$herdr-speak:speak` |
+| Antigravity (`agy`) | `git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak`<br>`agy plugin install ~/.herdr-speak` | `/speak` |
+| Gemini CLI (enterprise and API-key accounts) | `gemini extensions install https://github.com/jjeff/herdr-speak` | `/speak` |
+| OpenCode | `git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak`<br>`ln -s ~/.herdr-speak/skills/speak ~/.config/opencode/skills/speak` | `/speak` |
+| pi | `pi install git:github.com/jjeff/herdr-speak` | `/skill:speak` |
+| Hermes | `hermes skills install jjeff/herdr-speak/skills/speak` | `/speak` |
+
+Restart the agent after installing. Add `on` or `off` after the toggle; on is the default.
 
 **3. Add each remote machine to Herdr** if you haven't already: `herdr machine add <host>`.
 
@@ -64,7 +71,28 @@ description = "start speaker"
 
 ## Use
 
-In any Claude Code session, run `/speak` (its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Run `/speak off` to stop.
+In any agent session, run the toggle from the table above (in Claude Code its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Add `off` to stop.
+
+Antigravity, Gemini CLI, and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
+
+## Other agents
+
+The Speaker works with any agent Herdr detects (`herdr agent start --help` lists the kinds). The agent only needs a way to load the toggle in `skills/speak/SKILL.md`. To add one that isn't in the install table:
+
+1. **Check that Herdr detects it.** Start the agent in a Herdr pane, then run `herdr agent list`. The pane must appear with an `agent_status`. If it doesn't, the Speaker can't hear that agent.
+2. **Load the skill.** Most agents now read [Agent Skills](https://agentskills.io). Clone this repo, then link the skill into the agent's skills directory. Many agents read `~/.agents/skills`:
+
+   ```sh
+   git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak
+   mkdir -p ~/.agents/skills
+   ln -s ~/.herdr-speak/skills/speak ~/.agents/skills/speak
+   ```
+
+   If the agent has no skill support, make a custom command or saved prompt from the body of `SKILL.md`. As a last resort, paste the body into the session to turn speech on.
+3. **Find the toggle's name.** Many agents turn each skill into `/speak`. Others namespace it, as in `/herdr-speak:speak`, or use their own syntax, such as `$speak` or `/skill:speak`.
+4. **Test it.** Run the toggle, ask a short question, and listen. The Speaker pane logs every recap it speaks.
+
+If it works, please open a pull request that adds the agent to the install table.
 
 ## Configure
 
@@ -92,6 +120,8 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 
 - **Only the latest recap is spoken.** If a session finishes several turns between two polls, you hear the last one.
 - **Polling is sequential.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
+- **Hermes recaps aren't spoken yet.** The toggle works, but Herdr 0.9.3 doesn't list Hermes v0.21 panes in `herdr agent list`, so the Speaker never sees their turns finish.
+- **Background work delays the recap.** Herdr reports a Claude Code session as working while its background agents or commands run, so a turn that ends with background work pending is spoken only after that work finishes and a later turn ends.
 - **Detection uses Herdr's `completion_seq`** to catch turns shorter than one poll. Older servers that don't report it fall back to watching `working` → `done`/`idle`, which can miss a very short turn.
 
 ## Development
@@ -102,8 +132,15 @@ Link your checkout instead of installing:
 herdr plugin link .
 claude plugin marketplace add ./
 claude plugin install herdr-speak@herdr-speak
+codex plugin marketplace add ./
+agy plugin install "$PWD"
+gemini extensions link .
+ln -s "$PWD/skills/speak" ~/.config/opencode/skills/speak
+pi install ./
 python3 -m unittest
 ```
+
+For Hermes, add the checkout's `skills` directory to `skills.external_dirs` in `~/.hermes/config.yaml`.
 
 ## License
 
