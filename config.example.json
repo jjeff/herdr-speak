@@ -4,5 +4,6 @@
   "include_local": true,
   "machines": null,
   "poll_seconds": 2,
+  "alert_blocked": true,
   "announce": ["machine", "workspace", "tab"]
 }

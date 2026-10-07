@@ -13,6 +13,9 @@ Log and lock: $HERDR_PLUGIN_STATE_DIR/speaker.log and speaker.lock.
   speaker.py                 run in the foreground (development)
   speaker.py --background    detach, log to speaker.log; no-op if one is running
   speaker.py --restart       stop the running speaker first (combine with --background)
+  speaker.py --poke          make the running speaker poll now (Herdr event hook)
+  speaker.py --skip          stop the recap being spoken now
+  speaker.py --mute          toggle muting; the speaker keeps listening
 """
 
 import fcntl
@@ -20,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -33,6 +37,7 @@ CONFIG_DIR = os.environ.get(
 STATE_DIR = os.environ.get("HERDR_PLUGIN_STATE_DIR", CONFIG_DIR)
 LOCK_PATH = os.path.join(STATE_DIR, "speaker.lock")
 LOG_PATH = os.path.join(STATE_DIR, "speaker.log")
+MUTE_PATH = os.path.join(STATE_DIR, "muted")
 LOG_MAX_BYTES = 1_000_000
 MARKER = "\U0001F50A"  # 🔊
 RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
@@ -51,7 +56,7 @@ def log(msg):
 def load_config():
     cfg = {"voice": None, "rate": 210, "include_local": True,
            "machines": None, "poll_seconds": 2,
-           "announce": ["machine", "workspace", "tab"]}
+           "announce": ["machine", "workspace", "tab"], "alert_blocked": True}
     path = os.path.join(CONFIG_DIR, "config.json")
     try:
         with open(path) as f:
@@ -165,13 +170,25 @@ def extract_recap(text):
     return None
 
 
+SAYING = None  # the running `say`, so --skip can stop it
+
+
 def speak(text, cfg):
+    global SAYING
+    if os.path.exists(MUTE_PATH):
+        log("(muted)")
+        return
     cmd = ["say"]
     if cfg.get("voice"):
         cmd += ["-v", cfg["voice"]]
     if cfg.get("rate"):
         cmd += ["-r", str(cfg["rate"])]
-    if subprocess.run(cmd + [text]).returncode != 0:
+    SAYING = subprocess.Popen(cmd + [text])
+    rc = SAYING.wait()
+    SAYING = None
+    if rc == -signal.SIGTERM:
+        log("(skipped)")
+    elif rc != 0:
         # Most often: a Premium or Siri voice without Full Disk Access.
         log("`say` failed: Premium and Siri voices need Full Disk Access for the "
             "terminal app running Herdr (then restart the Speaker); see the README")
@@ -194,11 +211,30 @@ def take_lock():
     return f
 
 
-def stop_running():
+def signal_running(sig):
+    """Send sig to the running speaker. False when none is running."""
     try:
         with open(LOCK_PATH) as f:
-            os.kill(int(f.read().strip()), signal.SIGTERM)
+            os.kill(int(f.read().strip()), sig)
+        return True
     except (OSError, ValueError):
+        return False
+
+
+def toggle_mute():
+    if os.path.exists(MUTE_PATH):
+        os.remove(MUTE_PATH)
+        state = "unmuted"
+    else:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        open(MUTE_PATH, "w").close()
+        state = "muted"
+        signal_running(signal.SIGUSR2)  # and stop anything mid-sentence
+    herdr(["notification", "show", "herdr-speak", "--body", f"Speaker {state}", "--sound", "none"])
+
+
+def stop_running():
+    if not signal_running(signal.SIGTERM):
         return  # nothing running
     for _ in range(30):  # wait for its lock to free up
         lock = take_lock()
@@ -225,7 +261,33 @@ def detach():
     os.dup2(out, 2)
 
 
+def wake_pipe():
+    """Return a fd that turns readable when a signal arrives, so the poll sleep
+    ends early on --poke. (Lock and Event waits aren't interruptible on macOS.)"""
+    r, w = os.pipe()
+    os.set_blocking(r, False)
+    os.set_blocking(w, False)
+    signal.set_wakeup_fd(w)
+    signal.signal(signal.SIGUSR1, lambda *_: None)
+    signal.signal(signal.SIGUSR2, lambda *_: SAYING and SAYING.terminate())
+    return r
+
+
+def nap(fd, seconds):
+    select.select([fd], [], [], seconds)
+    try:
+        os.read(fd, 512)
+    except BlockingIOError:
+        pass
+
+
 def main():
+    if "--poke" in sys.argv:
+        return signal_running(signal.SIGUSR1)
+    if "--skip" in sys.argv:
+        return signal_running(signal.SIGUSR2)
+    if "--mute" in sys.argv:
+        return toggle_mute()
     if "--restart" in sys.argv:
         stop_running()
     if "--background" in sys.argv:
@@ -238,6 +300,7 @@ def main():
         log("`say` not found: run the speaker on your Mac, with Local selected.")
         sys.exit(1)
     cfg = load_config()
+    wake = wake_pipe()
     log(f"herdr-speak listening (herdr: {HERDR})")
     last_seen = {}     # (machine, pane) -> (status, completion_seq)
     last_spoken = {}   # (machine, pane) -> hash of last recap spoken
@@ -270,6 +333,16 @@ def main():
                     # Herdr lists a new agent only once it detects it, which can be
                     # after its first turn (often the /speak toggle) has finished.
                     prev = "working" if seq is not None or st in SETTLED else st
+                if st == "blocked" and prev != "blocked":
+                    live = load_config()
+                    if live.get("alert_blocked", True):
+                        # No recap to read: the agent stopped to ask. Always name it.
+                        name = source_name(data, pane, machine, label,
+                                           live.get("announce") or []) or "An agent"
+                        last_source = key
+                        log(f"[{label} {pane}] {name} needs you.")
+                        speak(f"{name} needs you.", live)
+                    continue
                 # A changed completion_seq catches turns shorter than one poll;
                 # the status transition covers servers that don't report it.
                 if (seq is not None and seq != prev_seq) or (prev in BUSY and st in SETTLED):
@@ -292,7 +365,7 @@ def main():
                     log(f"[{label} {pane}] {MARKER} {recap}")
                     speak(recap, live)
 
-        time.sleep(float(cfg.get("poll_seconds", 2)))
+        nap(wake, float(cfg.get("poll_seconds", 2)))
 
 
 if __name__ == "__main__":
