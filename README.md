@@ -9,13 +9,13 @@ herdr-speak has two halves, and both live in this repo:
 
 ## Why herdr-speak
 
-Other ways to hear from your agents solve a different problem:
+Other ways to hear from your agents make different trade-offs:
 
 - **Herdr's own sounds and toasts** (`[ui.sound]`, `[ui.toast]`) tell you *that* an agent finished or needs input. They don't tell you what it did.
-- **A stop hook that pipes the reply into `say`** runs on the machine where the agent runs. On a remote SSH machine the audio plays in an empty room. It also reads a reply written for the screen, with its code, paths, and tables.
-- **Built-in voice modes** belong to one agent on one machine, and you set each one up separately.
+- **Herdr plugins that summarize the pane,** such as [herdr-announcer](https://github.com/nhclink16/herdr-announcer) and [herdr-bleatr](https://github.com/zetlen/herdr-bleatr), run a separate model call on each agent's terminal output. They need no setup inside the agent, but each announcement costs a model call, the summary is a guess from scraped text, and they run on each Herdr server, so remote audio has to be routed back to you over SSH.
+- **A stop hook that pipes the reply into `say`** runs on the machine where the agent runs, and reads a reply written for the screen, with its code, paths, and tables.
 
-herdr-speak asks the agent for a one-line recap written to be heard, and plays it on the Mac in front of you, whichever machine and agent it came from. One `/speak` toggle works the same way in every supported agent, and with speech off it costs nothing.
+herdr-speak asks the agent that did the work for a one-line recap written to be heard. The Speaker is installed only on your Mac and reaches every machine through Herdr, so remote machines need nothing but the skill. Recaps from several agents queue instead of being dropped, and with speech off a session costs nothing.
 
 ## How it works
 
@@ -71,19 +71,30 @@ herdr plugin action invoke herdr-speak.start
 
 That action also restarts a running Speaker. Only one copy ever runs.
 
-To watch what the Speaker hears and says, run `herdr plugin action invoke herdr-speak.log`. It opens a pane that follows the log; close the pane when you're done, and the Speaker keeps running. You can bind either action to a key in your Herdr config:
+To watch what the Speaker hears and says, run `herdr plugin action invoke herdr-speak.log`. It opens a pane that follows the log; close the pane when you're done, and the Speaker keeps running. You can bind any action to a key in your Herdr config:
 
 ```toml
 [[keys.command]]
-key = "prefix+s"
+key = "prefix+m"
 type = "plugin_action"
-command = "herdr-speak.log"
-description = "speaker log"
+command = "herdr-speak.mute"
+description = "mute speaker"
 ```
 
 ## Use
 
 In any agent session, run the toggle from the table above (in Claude Code its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Add `off` to stop.
+
+When any agent stops to ask you something, the Speaker says "<name> needs you", even in sessions without `/speak`. Turn that off with `alert_blocked` (see [Configure](#configure)).
+
+These Herdr actions control the Speaker. Run each with `herdr plugin action invoke herdr-speak.<id>`, or bind it to a key:
+
+| id | does |
+|---|---|
+| `mute` | mute or unmute the Speaker; it keeps listening and stays muted across restarts |
+| `skip` | stop the recap being spoken now |
+| `log` | open a pane that follows the Speaker log |
+| `start` | start or restart the Speaker |
 
 Antigravity, Gemini CLI, and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
 
@@ -121,9 +132,10 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 | `include_local` | true | also watch agents on Local |
 | `machines` | all enabled | list of machine ids or labels to watch |
 | `poll_seconds` | 2 | seconds between checks |
+| `alert_blocked` | true | say "<name> needs you" when an agent stops to ask you something |
 | `announce` | `["machine", "workspace", "tab"]` | names to say before a recap from a different agent than the last one; `machine` applies to remote agents only, `[]` turns names off |
 
-`voice`, `rate`, and `announce` apply to the next recap. Run the `herdr-speak.start` action to restart the Speaker after changing the other keys.
+`voice`, `rate`, `announce`, and `alert_blocked` apply to the next recap. Run the `herdr-speak.start` action to restart the Speaker after changing the other keys.
 
 **Voices.** Leave `voice` unset to use your macOS system voice (System Settings → Accessibility → Spoken Content → System voice). That is the only way to use a Siri voice, because `say -v` doesn't list them. To pick a voice by name, set its exact name from `say -v '?'`. Better voices, such as "Ava (Premium)", are under System voice → Manage Voices….
 
@@ -132,8 +144,9 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 ## Limits
 
 - **Recaps play one at a time.** When several agents finish together, each recap waits for the one before it, and starts with the agent's name.
-- **Only the latest recap is spoken.** If a session finishes several turns between two polls, you hear the last one.
-- **Polling is sequential.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
+- **Only the latest recap is spoken.** If a session finishes several turns between two checks, you hear the last one.
+- **Remote machines are polled.** Herdr's event hook wakes the Speaker the moment a local agent changes state, but remote events fire on their own servers, so the Speaker checks remote machines every `poll_seconds`. The checks run one machine at a time.
+- **Unreachable machines slow the checks.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
 - **Hermes recaps aren't spoken yet.** The toggle works, but Herdr 0.9.3 doesn't list Hermes v0.21 panes in `herdr agent list`, so the Speaker never sees their turns finish.
 - **Background work delays the recap.** Herdr reports a Claude Code session as working while its background agents or commands run, so a turn that ends with background work pending is spoken only after that work finishes and a later turn ends.
 - **Detection uses Herdr's `completion_seq`** to catch turns shorter than one poll. Older servers that don't report it fall back to watching `working` → `done`/`idle`, which can miss a very short turn.
@@ -158,10 +171,12 @@ For Hermes, add the checkout's `skills` directory to `skills.external_dirs` in `
 
 ## Alternatives
 
-If you don't use Herdr, or you only want speech from one agent on one machine, one of these may suit you better. Listed as of October 2026; descriptions are from each project's README.
+If you'd rather not set up each agent, don't use Herdr, or only want speech from one agent on one machine, one of these may suit you better. Listed as of October 2026; descriptions are from each project's README.
 
 | project | agents | how it speaks |
 |---|---|---|
+| [nhclink16/herdr-announcer](https://github.com/nhclink16/herdr-announcer) | any agent in Herdr | A Herdr plugin that summarizes the pane with a model call when an agent finishes or needs input; dashboard, snooze, and mutes |
+| [zetlen/herdr-bleatr](https://github.com/zetlen/herdr-bleatr) | any agent in Herdr | A Herdr plugin that speaks a model-written sentence for agents in tabs you aren't looking at |
 | [blacktop/mcp-tts](https://github.com/blacktop/mcp-tts) | any MCP host, including Claude Code, Codex, and Gemini CLI | An MCP server the agent calls to speak, with macOS `say`, ElevenLabs, OpenAI, and local voices |
 | [kyleoliveiro/claude-speak](https://github.com/kyleoliveiro/claude-speak) | Claude Code | A stop hook summarizes each reply in one line and speaks it with Kokoro, a local model |
 | [hopchouinard/claude-speak](https://github.com/hopchouinard/claude-speak) | Claude Code | Spoken summaries each turn, plus a mode where Claude speaks mid-turn; OpenAI or ElevenLabs voices |

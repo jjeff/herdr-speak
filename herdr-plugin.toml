@@ -18,6 +18,24 @@ title = "Restart speaker"
 contexts = ["workspace"]
 command = ["python3", "speaker.py", "--restart", "--background"]
 
+# Local agents: poll right away instead of waiting for the next tick. Remote
+# agents' events fire on their own servers, so the Speaker still polls those.
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "speaker.py", "--poke"]
+
+[[actions]]
+id = "mute"
+title = "Mute or unmute speaker"
+contexts = ["workspace"]
+command = ["python3", "speaker.py", "--mute"]
+
+[[actions]]
+id = "skip"
+title = "Skip the current recap"
+contexts = ["workspace"]
+command = ["python3", "speaker.py", "--skip"]
+
 # Watch what the Speaker hears and says.
 [[panes]]
 id = "log"
