@@ -101,6 +101,7 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 
 - **Only the latest recap is spoken.** If a session finishes several turns between two polls, you hear the last one.
 - **Polling is sequential.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
+- **Hermes recaps aren't spoken yet.** The toggle works, but Herdr 0.9.3 doesn't list Hermes v0.21 panes in `herdr agent list`, so the Speaker never sees their turns finish.
 - **Background work delays the recap.** Herdr reports a Claude Code session as working while its background agents or commands run, so a turn that ends with background work pending is spoken only after that work finishes and a later turn ends.
 - **Detection uses Herdr's `completion_seq`** to catch turns shorter than one poll. Older servers that don't report it fall back to watching `working` → `done`/`idle`, which can miss a very short turn.
 
