@@ -2,6 +2,16 @@
 
 All notable changes to herdr-speak. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- A README recipe for OpenAI-compatible speech servers, such as VoiceStudio.
+
+### Fixed
+
+- The Full Disk Access hint appears only for macOS `say`, not for a custom `say_command`.
+
 ## [0.2.0] - 2026-10-07
 
 ### Added
@@ -33,5 +43,6 @@ All notable changes to herdr-speak. The format follows [Keep a Changelog](https:
 - First packaged release: the Herdr plugin and the Claude Code `/speak` command.
 - Recaps from turns shorter than one poll are caught through Herdr's `completion_seq`.
 
+[Unreleased]: https://github.com/jjeff/herdr-speak/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/jjeff/herdr-speak/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jjeff/herdr-speak/releases/tag/v0.1.0

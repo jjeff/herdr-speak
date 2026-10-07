@@ -147,6 +147,14 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 
 **Other voices and platforms.** On Windows the Speaker uses the default voice from Settings → Time & language → Speech. On Linux it uses the first of `spd-say`, `espeak-ng`, or `espeak` it finds. To use anything else, such as Piper or a local OpenAI-compatible speech server, point `say_command` at it. For example, `["espeak-ng", "-v", "en-gb", "{text}"]` picks a British espeak voice.
 
+**OpenAI-compatible speech servers.** This macOS `say_command` sends the recap to a server's `/v1/audio/speech` endpoint and plays the result. The URL is [VoiceStudio](https://voicestudio.sh/)'s default. Change it for another server, and add `"voice"` or `"model"` to the JSON to pick a voice or engine. On Linux, replace `afplay` with `aplay` or `paplay`.
+
+```json
+"say_command": ["sh", "-c", "f=\"${TMPDIR:-/tmp}/herdr-speak.wav\"; python3 -c 'import json, sys; print(json.dumps({\"input\": sys.stdin.read(), \"response_format\": \"wav\"}))' | curl -sf http://127.0.0.1:3900/v1/audio/speech -H 'Content-Type: application/json' -d @- -o \"$f\" && exec afplay \"$f\""]
+```
+
+Recaps start once the server finishes generating the audio, a few seconds with VoiceStudio. When the server isn't running, recaps are silent and the log shows `speech command exited with 22`.
+
 **Premium and Siri voices need Full Disk Access.** They load their models from a protected folder. Without access, `say` crashes with `failed to open bnns mmap file … errno: 1` and the Speaker logs a hint. Grant Full Disk Access to the terminal app that runs Herdr (System Settings → Privacy & Security → Full Disk Access), then quit and restart Herdr. The Speaker inherits Herdr's access, and only processes started after the grant get it. The built-in compact voices work without it.
 
 ## Limits
