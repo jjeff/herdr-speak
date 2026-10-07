@@ -164,10 +164,11 @@ agy plugin install "$PWD"
 gemini extensions link .
 ln -s "$PWD/skills/speak" ~/.config/opencode/skills/speak
 pi install ./
-python3 -m unittest
 ```
 
 For Hermes, add the checkout's `skills` directory to `skills.external_dirs` in `~/.hermes/config.yaml`.
+
+Run the checks that CI runs with `ruff check .`, `ruff format --check .`, and `python3 -m unittest`. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Alternatives
 
