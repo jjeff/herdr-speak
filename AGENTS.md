@@ -5,12 +5,16 @@ Two halves:
 - `speaker.py` is the Herdr plugin (`herdr-plugin.toml`) that reads 🔊 recaps aloud with macOS `say`. It is agent-agnostic: it watches every agent kind Herdr lists.
 - `skills/speak/SKILL.md` is the `/speak` toggle that makes an agent end each reply with a `🔊 <recap>` line. It is the single source of truth for the toggle text; each host's packaging only points at it.
 
-Run tests with `python3 -m unittest`.
+`hooks/register.tsx` is a Claude Code mod on top of the skill: a toggle above the prompt, the last state carried into new sessions (`$.store`), and the recap rules in the system prompt. It takes the rules from `SKILL.md`, the text between `Otherwise: ` and `Reply now`. Its toggle shows 🔉, never 🔊, because the Speaker reads any pane line that starts with 🔊 as a recap.
+
+Run tests with `python3 -m unittest`, and the mod's with `claude plugin validate .` and `claude plugin test .`.
 
 ## Herdr facts (verified on 0.9.3)
 
 - `herdr agent list` returns `{"result":{"agents":[{pane_id, agent, agent_status, completion_seq?, ...}]}}`. `completion_seq` bumps once per finished turn and is absent while the agent is working. The Speaker keys on it to catch turns shorter than one poll.
 - The Speaker reads the recap with `herdr agent read <pane> --source recent-unwrapped` and speaks the last line starting with 🔊.
+- Tab-bar entries (`ui.tab_bar_right`) are display-only: no click handlers, and a `command` entry gets `HERDR_BIN_PATH` but no plugin environment. So the Speaker writes 🔊 or 🔇 to `status` in the config dir, which `herdr plugin config-dir` can find; there is no CLI that prints the state dir.
+- `herdr pane report-metadata <pane> --source <id> --token speak=🔊` sets a token that sidebar rows show as `$speak`; `--clear-token speak` removes it. It forwards through `--machine`, and the token lasts until the pane closes.
 - `herdr --machine <label> <command>` forwards any API command to a saved SSH machine. `herdr machine list --json` lists them.
 - Plugin commands (startup hooks, actions, panes) get `HERDR_PLUGIN_ID`, `HERDR_PLUGIN_CONFIG_DIR`, `HERDR_PLUGIN_STATE_DIR`, and `HERDR_BIN_PATH`, with the plugin directory as cwd. Plugin v1 has no supervised daemons: `[[startup]]` hooks are one-shot, so the Speaker relaunches itself detached (`--background`) and holds `speaker.lock` in the state dir so reruns never start a second copy. Its log is `speaker.log` there (`~/.local/state/herdr/plugins/herdr-speak/` on macOS).
 - Other commands reach the running Speaker over a UDP socket on 127.0.0.1, whose port is in `speaker.pid` (`<pid> <port>`): the `pane.agent_status_changed` event hook sends `poke` (poll now), and `--skip` sends `skip`. Mute is the `muted` file in the state dir. Signals aren't used, because Windows has no SIGUSR1 or SIGUSR2.

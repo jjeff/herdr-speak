@@ -103,6 +103,36 @@ These Herdr actions control the Speaker. Run each with `herdr plugin action invo
 
 Antigravity, Gemini CLI, and Hermes can't stop the model from loading the skill on its own; the skill's description tells it to wait for `/speak`.
 
+### See what's on
+
+The Speaker can show its state in Herdr. Both snippets go in Herdr's `config.toml`; run `herdr server reload-config` after editing it.
+
+**Mute state in the tab bar.** This entry shows 🔊, or 🔇 while the Speaker is muted, at the right edge of the tab bar. Herdr's tab-bar entries can't be clicked, so bind `herdr-speak.mute` to a key as shown under [Install](#install).
+
+```toml
+[ui]
+tab_bar_right = [
+  { type = "command", command = 'cat "$("$HERDR_BIN_PATH" plugin config-dir herdr-speak)/status"', interval_seconds = 2, timeout_seconds = 2 },
+]
+```
+
+**Which agents are speaking.** The Speaker sets a `$speak` token on each agent whose last turn ended with a new recap, and clears it after a turn without one. Add the token to your sidebar rows:
+
+```toml
+[ui.sidebar.agents]
+rows = [["state_icon", "machine", "workspace", "tab", "$speak"], ["agent"]]
+```
+
+### Claude Code extras
+
+In Claude Code the plugin also loads a mod, which needs a version of Claude Code with mods:
+
+- **A toggle above the prompt.** While speech is on, the session shows `🔉 speech on`. Click it, or run `/speak off`, to turn speech off for that session. It then shows `🔇 speech off` and turns speech back on the same way. A session where speech was never on shows nothing.
+- **New sessions remember.** A new session starts in the state you last chose in any session.
+- **The recap rules live in the system prompt**, so a long session can't lose them when it compacts.
+
+Clicks reach Claude Code only in its fullscreen mode. Elsewhere, press ctrl+x tab to focus the toggle, then Enter.
+
 ### Customize the recaps
 
 The toggle gives the agent default rules: one line, at most two short sentences, plain spoken English. Your own instructions win over them. Put lasting rules in the file your agent reads for instructions, such as `AGENTS.md` or `CLAUDE.md`:
@@ -177,6 +207,7 @@ Recaps start once the server finishes generating the audio, a few seconds with V
 - **Unreachable machines slow the checks.** An unreachable machine can delay each check by up to 10 seconds. List only the machines you want in `machines`.
 - **Hermes recaps aren't spoken yet.** The toggle works, but Herdr 0.9.3 doesn't list Hermes v0.21 panes in `herdr agent list`, so the Speaker never sees their turns finish.
 - **Background work delays the recap.** Herdr reports a Claude Code session as working while its background agents or commands run, so a turn that ends with background work pending is spoken only after that work finishes and a later turn ends.
+- **The Claude Code mod uses an early-access API.** A Claude Code update can change it. The `/speak` skill doesn't depend on the mod.
 - **Detection uses Herdr's `completion_seq`** to catch turns shorter than one poll. Older servers that don't report it fall back to watching `working` → `done`/`idle`, which can miss a very short turn.
 
 ## Development
@@ -196,7 +227,7 @@ pi install ./
 
 For Hermes, add the checkout's `skills` directory to `skills.external_dirs` in `~/.hermes/config.yaml`.
 
-Run the checks that CI runs with `ruff check .`, `ruff format --check .`, and `python3 -m unittest`. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Run the checks that CI runs with `ruff check .`, `ruff format --check .`, and `python3 -m unittest`. After changing the Claude Code mod (`hooks/register.tsx`), also run `claude plugin validate .` and `claude plugin test .`. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Alternatives
 

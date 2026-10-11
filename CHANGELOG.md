@@ -6,11 +6,16 @@ All notable changes to herdr-speak. The format follows [Keep a Changelog](https:
 
 ### Added
 
+- A mute indicator for Herdr's tab bar: the Speaker writes 🔊 or 🔇 to a `status` file that a tab-bar command reads.
+- A `$speak` sidebar token that marks the agents whose last turn had a spoken recap.
+- A Claude Code mod: a click toggle above the prompt, new sessions that start in the last state you chose, and the recap rules in the system prompt.
 - A README recipe for OpenAI-compatible speech servers, such as VoiceStudio.
 - Your own instructions, such as AGENTS.md, CLAUDE.md, or text after the toggle, now win over the toggle's default recap rules. The README shows how to change recap length, tone, and language.
 
 ### Fixed
 
+- Claude Code's own session recaps are no longer spoken. They often copied the 🔊 line, and the Speaker read them out with their "(disable recaps in /config)" hint.
+- A 🔊 in the middle of a line, such as an agent writing about this tool, is no longer read as a recap.
 - The Full Disk Access hint appears only for macOS `say`, not for a custom `say_command`.
 
 ## [0.2.0] - 2026-10-07

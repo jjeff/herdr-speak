@@ -41,6 +41,22 @@ class ExtractRecap(unittest.TestCase):
         # OpenCode shows the skill body, template line included, in the pane.
         self.assertIsNone(speaker.extract_recap("┃  🔊 <spoken recap>\n┃  Rules for the recap:\n"))
 
+    def test_skips_marker_inside_a_sentence(self):
+        text = "● 🔊 Real recap.\n\n  1. Claude adds a 🔊/🔇 entry to the tab bar.\n"
+        self.assertEqual(speaker.extract_recap(text), "Real recap.")
+
+    def test_skips_claude_codes_own_recap(self):
+        # Claude Code's summary of a session you return to copies the 🔊 line.
+        turn = "⏺ Done.\n\n  🔊 The fix is pushed.\n\n✻ Cooked for 5s\n\n"
+        own = (
+            "※ recap: You wanted the fix out, and it is pushed.\n  Next, merge it.\n\n"
+            "  🔊 The fix is out. Next, merge it. (disable recaps\n  in /config)\n\n❯ \n"
+        )
+        self.assertEqual(speaker.extract_recap(turn + own), "The fix is pushed.")
+        self.assertTrue(speaker.ends_with_builtin_recap(turn + own))
+        self.assertFalse(speaker.ends_with_builtin_recap(turn + own + "⏺ New reply.\n"))
+        self.assertFalse(speaker.ends_with_builtin_recap(turn))
+
     def test_no_recap(self):
         self.assertIsNone(speaker.extract_recap("no marker here"))
         self.assertIsNone(speaker.extract_recap(None))
@@ -173,6 +189,11 @@ class Manifests(unittest.TestCase):
         manifest = tomllib.loads((ROOT / "herdr-plugin.toml").read_text())
         self.assertEqual(manifest["id"], "herdr-speak")
 
+    def test_skill_has_the_parts_the_mod_extracts(self):
+        # hooks/register.tsx puts the text between these two anchors in the system prompt.
+        skill = (ROOT / "skills/speak/SKILL.md").read_text()
+        self.assertLess(skill.index("Otherwise: "), skill.rindex("Reply now"))
+
     def test_skills_have_frontmatter(self):
         for skill in ROOT.glob("skills/*/SKILL.md"):
             head = skill.read_text().split("---")[1]
@@ -206,6 +227,8 @@ class Control(unittest.TestCase):
             "STATE_DIR": self.dir.name,
             "LOCK_PATH": os.path.join(self.dir.name, "speaker.lock"),
             "PID_PATH": os.path.join(self.dir.name, "speaker.pid"),
+            "MUTE_PATH": os.path.join(self.dir.name, "muted"),
+            "STATUS_PATH": os.path.join(self.dir.name, "status"),
         }
         self.patches = [mock.patch.object(speaker, k, v) for k, v in paths.items()]
         for p in self.patches:
@@ -222,6 +245,14 @@ class Control(unittest.TestCase):
         self.assertIsNone(speaker.take_lock())
         first.close()
         speaker.take_lock().close()
+
+    def test_mute_toggles_the_status_file(self):
+        status = pathlib.Path(speaker.STATUS_PATH)
+        with mock.patch.object(speaker, "herdr"):
+            speaker.toggle_mute()
+            self.assertEqual(status.read_text(encoding="utf-8"), "🔇")
+            speaker.toggle_mute()
+            self.assertEqual(status.read_text(encoding="utf-8"), "🔊")
 
     def test_poke_reaches_the_speaker(self):
         self.assertFalse(speaker.send(b"poke"))  # nothing running yet

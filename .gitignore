@@ -1,2 +1,5 @@
 .DS_Store
 __pycache__/
+
+# Written by Claude Code when it loads the mod from this folder.
+tsconfig.json
