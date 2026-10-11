@@ -7,5 +7,6 @@
     "url": "https://github.com/jjeff"
   },
   "homepage": "https://github.com/jjeff/herdr-speak",
-  "license": "MIT"
+  "license": "MIT",
+  "types": "./types/index.d.ts"
 }

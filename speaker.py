@@ -45,6 +45,9 @@ LOCK_PATH = os.path.join(STATE_DIR, "speaker.lock")
 PID_PATH = os.path.join(STATE_DIR, "speaker.pid")  # "<pid> <control port>"
 LOG_PATH = os.path.join(STATE_DIR, "speaker.log")
 MUTE_PATH = os.path.join(STATE_DIR, "muted")
+# 🔊 or 🔇, for a Herdr tab-bar command. It is in the config dir because
+# `herdr plugin config-dir` is the one plugin path a command outside the plugin can find.
+STATUS_PATH = os.path.join(CONFIG_DIR, "status")
 LOG_MAX_BYTES = 1_000_000
 PLUGIN_ID = os.environ.get("HERDR_PLUGIN_ID", "herdr-speak")
 # A detached Windows process has no console, so every child would open a window.
@@ -56,7 +59,10 @@ WINDOWS_SPEAK = (
     "(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak([Console]::In.ReadToEnd())"
 )
 MARKER = "\U0001f50a"  # 🔊
-RECAP_RE = re.compile(MARKER + r"\s*(.+?)\s*$")
+MUTED_MARK = "\U0001f507"  # 🔇
+# Only spaces and TUI glyphs may come before the marker: a 🔊 in the middle of
+# a sentence (an agent writing about this tool) is not a recap.
+RECAP_RE = re.compile(r"^\W*" + MARKER + r"\s*(.+?)\s*$")
 # Lines an agent TUI starts with its own glyph (tool or hook output, prompts,
 # bullets) aren't part of a wrapped recap. ⎿ is Claude Code's hook/tool output.
 TUI_MARKS = "⎿●•◦❯›>▸○⏺▣✻✽✶"
@@ -213,7 +219,7 @@ def extract_recap(text):
         line = lines[i]
         if MARKER not in line or f'"{MARKER}' in line or f"`{MARKER}" in line:
             continue  # skip quoted instruction text
-        m = RECAP_RE.search(line)
+        m = RECAP_RE.match(line)
         if m and m.group(1) and not m.group(1).startswith("<"):  # "<spoken recap>" template
             # Agent TUIs hard-wrap long lines at the pane width, so the recap
             # continues on the following lines until a blank one.
@@ -357,6 +363,20 @@ def stop_running():
         time.sleep(0.1)
 
 
+def write_status():
+    try:
+        with open(STATUS_PATH, "w", encoding="utf-8") as f:
+            f.write(MUTED_MARK if os.path.exists(MUTE_PATH) else MARKER)
+    except OSError:
+        pass
+
+
+def mark_pane(pane, machine, on):
+    """Set or clear the pane's `speak` token, which a sidebar row shows as $speak."""
+    token = ["--token", f"speak={MARKER}"] if on else ["--clear-token", "speak"]
+    herdr(["pane", "report-metadata", pane, "--source", PLUGIN_ID, *token], machine)
+
+
 def toggle_mute():
     if os.path.exists(MUTE_PATH):
         os.remove(MUTE_PATH)
@@ -366,6 +386,7 @@ def toggle_mute():
         open(MUTE_PATH, "w").close()
         state = "muted"
         send(b"skip")  # and stop anything mid-sentence
+    write_status()
     herdr(["notification", "show", "herdr-speak", "--body", f"Speaker {state}", "--sound", "none"])
 
 
@@ -440,9 +461,11 @@ def main():
     CONTROL.bind(("127.0.0.1", 0))
     with open(PID_PATH, "w") as f:
         f.write(f"{os.getpid()} {CONTROL.getsockname()[1]}")
+    write_status()
     log(f"herdr-speak listening (herdr: {HERDR})")
     last_seen = {}  # (machine, pane) -> (status, completion_seq)
     last_spoken = {}  # (machine, pane) -> hash of last recap spoken
+    marked = {}  # (machine, pane) -> whether the pane's sidebar token is set
     baselined = set()  # machines whose agents were listed at least once
     last_source = None  # (machine, pane) of the last recap spoken
     machines, refreshed = {}, 0.0
@@ -481,11 +504,14 @@ def main():
                         machine,
                     )
                     recap = extract_recap(out)
-                    if not recap:
+                    h = hashlib.sha1(recap.encode()).hexdigest() if recap else None
+                    # An old recap still in the scrollback means this turn had none.
+                    fresh = h is not None and last_spoken.get(key) != h
+                    if marked.get(key) != fresh:
+                        marked[key] = fresh
+                        mark_pane(pane, machine, fresh)
+                    if not fresh:
                         continue
-                    h = hashlib.sha1(recap.encode()).hexdigest()
-                    if last_spoken.get(key) == h:
-                        continue  # already said this one
                     last_spoken[key] = h
                     live = load_config()  # re-read so voice/rate/announce edits apply live
                     if key != last_source:
