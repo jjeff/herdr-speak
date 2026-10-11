@@ -45,6 +45,18 @@ class ExtractRecap(unittest.TestCase):
         text = "● 🔊 Real recap.\n\n  1. Claude adds a 🔊/🔇 entry to the tab bar.\n"
         self.assertEqual(speaker.extract_recap(text), "Real recap.")
 
+    def test_skips_claude_codes_own_recap(self):
+        # Claude Code's summary of a session you return to copies the 🔊 line.
+        turn = "⏺ Done.\n\n  🔊 The fix is pushed.\n\n✻ Cooked for 5s\n\n"
+        own = (
+            "※ recap: You wanted the fix out, and it is pushed.\n  Next, merge it.\n\n"
+            "  🔊 The fix is out. Next, merge it. (disable recaps\n  in /config)\n\n❯ \n"
+        )
+        self.assertEqual(speaker.extract_recap(turn + own), "The fix is pushed.")
+        self.assertTrue(speaker.ends_with_builtin_recap(turn + own))
+        self.assertFalse(speaker.ends_with_builtin_recap(turn + own + "⏺ New reply.\n"))
+        self.assertFalse(speaker.ends_with_builtin_recap(turn))
+
     def test_no_recap(self):
         self.assertIsNone(speaker.extract_recap("no marker here"))
         self.assertIsNone(speaker.extract_recap(None))

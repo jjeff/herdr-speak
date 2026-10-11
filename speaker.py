@@ -67,6 +67,10 @@ RECAP_RE = re.compile(r"^\W*" + MARKER + r"\s*(.+?)\s*$")
 # bullets) aren't part of a wrapped recap. ⎿ is Claude Code's hook/tool output.
 TUI_MARKS = "⎿●•◦❯›>▸○⏺▣✻✽✶"
 BOX_CHARS = "".join(map(chr, range(0x2500, 0x2580)))  # TUI borders, e.g. pi's ┃
+# Claude Code's own summary of a session you return to. Its model sees the
+# speech rules too, so it often ends with a 🔊 line that isn't a turn's recap.
+BUILTIN_RECAP = "※ recap:"
+TURN_MARKS = "⏺●✻✽✶"  # lines a turn prints: replies, tool calls, "✻ Worked for 4s"
 BUSY = {"working", "blocked"}
 SETTLED = {"idle", "done"}
 READ_LINES = "150"
@@ -213,6 +217,28 @@ def list_machines(cfg):
     return found
 
 
+def in_builtin_recap(lines, i):
+    """True when line i is part of Claude Code's own recap block."""
+    for line in reversed(lines[max(0, i - 12) : i]):
+        body = line.strip(BOX_CHARS + " \t")
+        if body.startswith(BUILTIN_RECAP):
+            return True
+        if body and body[0] in TURN_MARKS:
+            return False
+    return False
+
+
+def ends_with_builtin_recap(text):
+    """True when Claude Code's own recap is the newest output: no turn just ended."""
+    for line in reversed((text or "").splitlines()):
+        body = line.strip(BOX_CHARS + " \t")
+        if body.startswith(BUILTIN_RECAP):
+            return True
+        if body and body[0] in TURN_MARKS:
+            return False
+    return False
+
+
 def extract_recap(text):
     lines = (text or "").splitlines()
     for i in range(len(lines) - 1, -1, -1):
@@ -220,6 +246,8 @@ def extract_recap(text):
         if MARKER not in line or f'"{MARKER}' in line or f"`{MARKER}" in line:
             continue  # skip quoted instruction text
         m = RECAP_RE.match(line)
+        if m and in_builtin_recap(lines, i):
+            continue
         if m and m.group(1) and not m.group(1).startswith("<"):  # "<spoken recap>" template
             # Agent TUIs hard-wrap long lines at the pane width, so the recap
             # continues on the following lines until a blank one.
@@ -503,6 +531,8 @@ def main():
                         ["agent", "read", pane, "--source", "recent-unwrapped", "--lines", READ_LINES],
                         machine,
                     )
+                    if ends_with_builtin_recap(out):
+                        continue  # Claude Code summarized the session; nothing new to say
                     recap = extract_recap(out)
                     h = hashlib.sha1(recap.encode()).hexdigest() if recap else None
                     # An old recap still in the scrollback means this turn had none.
