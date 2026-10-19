@@ -31,6 +31,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 if os.name == "nt":
@@ -50,6 +51,8 @@ MUTE_PATH = os.path.join(STATE_DIR, "muted")
 STATUS_PATH = os.path.join(CONFIG_DIR, "status")
 LOG_MAX_BYTES = 1_000_000
 PLUGIN_ID = os.environ.get("HERDR_PLUGIN_ID", "herdr-speak")
+# A key binding on a saved machine sets this workspace token to "mute" or "skip".
+KEY_TOKEN = "speak_key"
 # A detached Windows process has no console, so every child would open a window.
 NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 # Windows' built-in voice; the text arrives on stdin.
@@ -297,19 +300,9 @@ def speak(text, cfg):
     if not cmd:
         log("no speech command found: install spd-say or espeak-ng, or set say_command")
         return
-    stdin = not any("{text}" in arg for arg in cmd)
-    argv = [arg.replace("{text}", text) for arg in cmd]
-    try:
-        SAYING = subprocess.Popen(argv, stdin=subprocess.PIPE if stdin else subprocess.DEVNULL, **NO_WINDOW)
-    except OSError as e:
-        log(f"speech command failed to start: {e}")
+    SAYING = start_say(cmd, text)
+    if not SAYING:
         return
-    if stdin:
-        try:
-            SAYING.stdin.write(text.encode("utf-8"))
-            SAYING.stdin.close()
-        except OSError:
-            pass
     SKIPPED = False
     while SAYING.poll() is None:
         listen(0.2)  # --skip can stop it mid-sentence
@@ -321,6 +314,24 @@ def speak(text, cfg):
         if sys.platform == "darwin" and not cfg.get("say_command"):
             # Most often: a Premium or Siri voice without Full Disk Access.
             log("Premium and Siri voices need Full Disk Access for Herdr's terminal app; see the README")
+
+
+def start_say(cmd, text):
+    """Start speaking text without waiting. The process, or None if it failed to start."""
+    stdin = not any("{text}" in arg for arg in cmd)
+    argv = [arg.replace("{text}", text) for arg in cmd]
+    try:
+        proc = subprocess.Popen(argv, stdin=subprocess.PIPE if stdin else subprocess.DEVNULL, **NO_WINDOW)
+    except OSError as e:
+        log(f"speech command failed to start: {e}")
+        return None
+    if stdin:
+        try:
+            proc.stdin.write(text.encode("utf-8"))
+            proc.stdin.close()
+        except OSError:
+            pass
+    return proc
 
 
 def listen(timeout):
@@ -409,6 +420,9 @@ def toggle_mute():
     if os.path.exists(MUTE_PATH):
         os.remove(MUTE_PATH)
         state = "unmuted"
+        cmd = say_command(load_config())
+        if cmd:
+            start_say(cmd, "Unmuted")  # so a key press confirms itself by ear
     else:
         os.makedirs(STATE_DIR, exist_ok=True)
         open(MUTE_PATH, "w").close()
@@ -416,6 +430,42 @@ def toggle_mute():
         send(b"skip")  # and stop anything mid-sentence
     write_status()
     herdr(["notification", "show", "herdr-speak", "--body", f"Speaker {state}", "--sound", "none"])
+
+
+def key_requests(listing):
+    """Return [(workspace_id, request)] for workspaces a key binding marked."""
+    return [
+        (d["workspace_id"], d["tokens"][KEY_TOKEN])
+        for d in walk(listing)
+        if d.get("workspace_id") and KEY_TOKEN in (d.get("tokens") or {})
+    ]
+
+
+def watch_keys(machine, label):
+    """Act on mute and skip keys pressed in a saved machine's panes.
+
+    Herdr runs a remote pane's key bindings on that machine, which has no
+    Speaker, so the binding sets a workspace token for this thread to pick up.
+    Each machine gets its own thread, so an unreachable one can't delay the rest.
+    Tokens already set when the machine first answers are stale and only cleared.
+    """
+    baselined = False
+    while True:
+        listing = parse_json(herdr(["workspace", "list"], machine))
+        for ws, request in key_requests(listing):
+            herdr(
+                ["workspace", "report-metadata", ws, "--source", PLUGIN_ID, "--clear-token", KEY_TOKEN],
+                machine,
+            )
+            if not baselined:
+                continue
+            log(f"[{label}] {request} key")
+            if request == "mute":
+                toggle_mute()
+            elif request == "skip":
+                send(b"skip")
+        baselined = baselined or listing is not None
+        time.sleep(1)
 
 
 def detach():
@@ -497,6 +547,7 @@ def main():
     baselined = set()  # machines whose agents were listed at least once
     last_source = None  # (machine, pane) of the last recap spoken
     machines, refreshed = {}, 0.0
+    watched = set()  # machines with a watch_keys thread
 
     while True:
         if time.time() - refreshed > MACHINE_REFRESH_SECONDS:
@@ -504,6 +555,9 @@ def main():
             if new != machines:
                 log("machines: " + (", ".join(new.values()) or "none"))
             machines, refreshed = new, time.time()
+            for machine in machines.keys() - watched:  # ponytail: a removed machine's thread keeps polling
+                watched.add(machine)
+                threading.Thread(target=watch_keys, args=(machine, machines[machine]), daemon=True).start()
 
         targets = ([(None, "local")] if cfg["include_local"] else []) + list(machines.items())
         for machine, label in targets:
