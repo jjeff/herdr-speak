@@ -248,11 +248,14 @@ class Control(unittest.TestCase):
 
     def test_mute_toggles_the_status_file(self):
         status = pathlib.Path(speaker.STATUS_PATH)
-        with mock.patch.object(speaker, "herdr"):
+        say_cmd = mock.patch.object(speaker, "say_command", return_value=["say"])
+        with mock.patch.object(speaker, "herdr"), say_cmd, mock.patch.object(speaker, "start_say") as say:
             speaker.toggle_mute()
             self.assertEqual(status.read_text(encoding="utf-8"), "🔇")
+            say.assert_not_called()
             speaker.toggle_mute()
             self.assertEqual(status.read_text(encoding="utf-8"), "🔊")
+            self.assertEqual(say.call_args.args[1], "Unmuted")
 
     def test_poke_reaches_the_speaker(self):
         self.assertFalse(speaker.send(b"poke"))  # nothing running yet
@@ -266,3 +269,20 @@ class Control(unittest.TestCase):
             self.assertTrue(speaker.POKED)
         speaker.POKED = False
         sock.close()
+
+
+class KeyRequests(unittest.TestCase):
+    def test_finds_marked_workspaces_only(self):
+        listing = {
+            "result": {
+                "workspaces": [
+                    {"workspace_id": "w1", "tokens": {"speak_key": "mute"}},
+                    {"workspace_id": "w2", "tokens": {"other": "x"}},
+                    {"workspace_id": "w3"},
+                ]
+            }
+        }
+        self.assertEqual(speaker.key_requests(listing), [("w1", "mute")])
+
+    def test_unreachable_machine(self):
+        self.assertEqual(speaker.key_requests(None), [])

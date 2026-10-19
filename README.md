@@ -86,6 +86,18 @@ command = "herdr-speak.mute"
 description = "mute speaker"
 ```
 
+A saved SSH machine's panes use the key bindings in that machine's own Herdr config, and they run there, where the Speaker isn't. To mute from those panes, add this binding to each saved machine's `config.toml`. It sets a workspace token that the Speaker polls for; use `speak_key=skip` to bind skip instead.
+
+```toml
+[[keys.command]]
+key = "prefix+m"
+type = "shell"
+command = '"$HERDR_BIN_PATH" workspace report-metadata "$HERDR_ACTIVE_WORKSPACE_ID" --source herdr-speak --token speak_key=mute'
+description = "mute speaker"
+```
+
+On a Windows machine, write the variables as `%HERDR_BIN_PATH%` and `%HERDR_ACTIVE_WORKSPACE_ID%`.
+
 ## Use
 
 In any agent session, run the toggle from the table above (in Claude Code its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Add `off` to stop.
