@@ -442,10 +442,11 @@ def key_requests(listing):
 
 
 def watch_keys(machine, label):
-    """Act on mute and skip keys pressed in a saved machine's panes.
+    """Act on mute and skip keys pressed in a machine's panes.
 
     Herdr runs a remote pane's key bindings on that machine, which has no
     Speaker, so the binding sets a workspace token for this thread to pick up.
+    Local is watched too, so one binding works in a config shared by all machines.
     Each machine gets its own thread, so an unreachable one can't delay the rest.
     Tokens already set when the machine first answers are stale and only cleared.
     """
@@ -555,9 +556,11 @@ def main():
             if new != machines:
                 log("machines: " + (", ".join(new.values()) or "none"))
             machines, refreshed = new, time.time()
-            for machine in machines.keys() - watched:  # ponytail: a removed machine's thread keeps polling
+            # Local too: a config shared with saved machines (iCloud, dotfiles) has the token binding.
+            keyed = {None: "local", **machines}
+            for machine in keyed.keys() - watched:  # ponytail: a removed machine's thread keeps polling
                 watched.add(machine)
-                threading.Thread(target=watch_keys, args=(machine, machines[machine]), daemon=True).start()
+                threading.Thread(target=watch_keys, args=(machine, keyed[machine]), daemon=True).start()
 
         targets = ([(None, "local")] if cfg["include_local"] else []) + list(machines.items())
         for machine, label in targets:
