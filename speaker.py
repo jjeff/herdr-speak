@@ -21,6 +21,7 @@ $HERDR_PLUGIN_STATE_DIR.
   speaker.py --open-log      open the log pane
 """
 
+import glob
 import hashlib
 import json
 import os
@@ -31,6 +32,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -108,18 +110,35 @@ def load_config():
 
 def herdr(args, machine=None):
     cmd = [HERDR] + (["--machine", machine] if machine else []) + args
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
+        errors="replace",
+        **NO_WINDOW,
+    )
     try:
-        r = subprocess.run(
-            cmd,
-            capture_output=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=CALL_TIMEOUT,
-            **NO_WINDOW,
-        )
+        out, _ = proc.communicate(timeout=CALL_TIMEOUT)
     except subprocess.TimeoutExpired:
-        return None
-    return r.stdout if r.returncode == 0 else None
+        proc.kill()
+        proc.communicate()
+        out = None
+    finally:
+        if machine:
+            remove_ssh_dirs(proc.pid)
+    return out if proc.returncode == 0 else None
+
+
+def remove_ssh_dirs(pid):
+    """Remove the herdr-ssh-<pid>-<n> temp dirs Herdr leaves behind.
+
+    Herdr 0.9.3 writes one per --machine call and never deletes it, so a
+    Speaker polling every second fills the temp dir. ssh reads the config only
+    at startup, so removing it after the call is safe.
+    """
+    for d in glob.glob(os.path.join(tempfile.gettempdir(), f"herdr-ssh-{pid}-*")):
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def parse_json(text):

@@ -286,3 +286,13 @@ class KeyRequests(unittest.TestCase):
 
     def test_unreachable_machine(self):
         self.assertEqual(speaker.key_requests(None), [])
+
+
+class RemoveSshDirs(unittest.TestCase):
+    def test_removes_only_that_pid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("herdr-ssh-42-0", "herdr-ssh-42-3", "herdr-ssh-420-0", "other"):
+                os.makedirs(os.path.join(tmp, name))
+            with mock.patch.object(speaker.tempfile, "gettempdir", return_value=tmp):
+                speaker.remove_ssh_dirs(42)
+            self.assertEqual(sorted(os.listdir(tmp)), ["herdr-ssh-420-0", "other"])
