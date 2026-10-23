@@ -21,8 +21,8 @@ $HERDR_PLUGIN_STATE_DIR.
   speaker.py --open-log      open the log pane
 """
 
-import hashlib
 import glob
+import hashlib
 import json
 import os
 import re
