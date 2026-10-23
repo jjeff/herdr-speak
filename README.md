@@ -102,7 +102,7 @@ On a Windows machine, write the variables as `%HERDR_BIN_PATH%` and `%HERDR_ACTI
 
 In any agent session, run the toggle from the table above (in Claude Code its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Add `off` to stop.
 
-When any agent stops to ask you something, the Speaker says "<name> needs you", even in sessions without `/speak`. Turn that off with `alert_blocked` (see [Configure](#configure)).
+The Speaker can also say "<name> needs you" when any agent stops to ask you something, even in sessions without `/speak`. It is off by default, because Herdr can play its own sound when an agent changes state. Turn it on with `alert_blocked` (see [Configure](#configure)).
 
 These Herdr actions control the Speaker. Run each with `herdr plugin action invoke herdr-speak.<id>`, or bind it to a key:
 
@@ -192,7 +192,7 @@ cp config.example.json "$(herdr plugin config-dir herdr-speak)/config.json"
 | `include_local` | true | also watch agents on Local |
 | `machines` | all enabled | list of machine ids or labels to watch |
 | `poll_seconds` | 2 | seconds between checks |
-| `alert_blocked` | true | say "<name> needs you" when an agent stops to ask you something |
+| `alert_blocked` | false | say "<name> needs you" when an agent stops to ask you something; off by default because Herdr can play its own sound on state changes |
 | `announce` | `["machine", "workspace", "tab"]` | names to say before a recap from a different agent than the last one; `machine` applies to remote agents only, `[]` turns names off |
 
 `voice`, `rate`, `say_command`, `announce`, and `alert_blocked` apply to the next recap. Run the `herdr-speak.start` action to restart the Speaker after changing the other keys.

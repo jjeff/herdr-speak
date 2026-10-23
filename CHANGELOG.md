@@ -12,6 +12,10 @@ All notable changes to herdr-speak. The format follows [Keep a Changelog](https:
 - A README recipe for OpenAI-compatible speech servers, such as VoiceStudio.
 - Your own instructions, such as AGENTS.md, CLAUDE.md, or text after the toggle, now win over the toggle's default recap rules. The README shows how to change recap length, tone, and language.
 
+### Changed
+
+- "<name> needs you" alerts are off by default, because Herdr can now play its own sound when an agent changes state. Set `alert_blocked` to `true` to bring them back.
+
 ### Fixed
 
 - Claude Code's own session recaps are no longer spoken. They often copied the 🔊 line, and the Speaker read them out with their "(disable recaps in /config)" hint.

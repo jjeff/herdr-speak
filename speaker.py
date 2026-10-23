@@ -93,7 +93,7 @@ def load_config():
         "machines": None,
         "poll_seconds": 2,
         "announce": ["machine", "workspace", "tab"],
-        "alert_blocked": True,
+        "alert_blocked": False,
     }
     path = os.path.join(CONFIG_DIR, "config.json")
     try:
@@ -574,7 +574,7 @@ def main():
                 event, last_seen[key] = classify(last_seen.get(key), st, seq, first_listing)
                 if event == "blocked":
                     live = load_config()
-                    if live.get("alert_blocked", True):
+                    if live.get("alert_blocked"):
                         # No recap to read: the agent stopped to ask. Always name it.
                         name = (
                             source_name(data, pane, machine, label, live.get("announce") or []) or "An agent"
