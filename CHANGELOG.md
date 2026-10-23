@@ -14,6 +14,7 @@ All notable changes to herdr-speak. The format follows [Keep a Changelog](https:
 
 ### Fixed
 
+- The Speaker no longer fills the temp dir. Herdr leaves a `herdr-ssh-*` folder behind on every `--machine` call, and polling saved machines each second piled up tens of thousands of them; the Speaker now removes its own.
 - Claude Code's own session recaps are no longer spoken. They often copied the 🔊 line, and the Speaker read them out with their "(disable recaps in /config)" hint.
 - A 🔊 in the middle of a line, such as an agent writing about this tool, is no longer read as a recap.
 - The Full Disk Access hint appears only for macOS `say`, not for a custom `say_command`.
