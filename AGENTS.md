@@ -22,6 +22,14 @@ Run tests with `python3 -m unittest`, and the mod's with `claude plugin validate
 - On Windows the detached Speaker has no console, so every child process needs `CREATE_NO_WINDOW` or it flashes a window, and stdout and Herdr's output must be decoded as UTF-8 (the default is cp1252).
 - Premium and Siri voices need Full Disk Access for the terminal app that runs Herdr. Only processes started after the grant get it, so restart the Speaker after granting.
 
+## Herdr desktop app facts (verified on herdr-app 0.1.12, herdr-core 0.1.18)
+
+- The app's terminals run in herdr-core (`hc`), not the Herdr TUI server, so `herdr agent list` never sees them. The Speaker also polls `hc ls --json` when `hc` is on PATH or in `~/.local/bin`.
+- `hc ls --json` returns `{"machines":[{name, state}], "terminals":[{address, agent, status?, turn, where?, ...}]}` for this computer and every connected machine in one call. A remote address is `<machine>/t3`. Only agents have `status` (a string here; `hc get` gives `{app, state}`); every terminal has a `state` of `live` or `finished`, which is not a status. `turn` counts finished turns and is 0 before the first. `where` is `<space> / <tab>`, absent for hidden terminals.
+- `hc read <address> --lines N` returns the screen with history, and Claude Code's 🔊 line comes through whole. It works on remote addresses too.
+- The mod in `mods/herdr-speak/` starts the Speaker with the TUI plugin's config and state folders, so the TUI and the app share one Speaker, its lock, and its mute file. A copy started by either one makes the other's start a no-op.
+- Shipped app layouts are read-only: a new mod does not dock into `main`, and `mod.open` only shows it as an overlay. A key bound to `herdr-speak.mute` reaches the mod only while a layout shows it.
+
 ## Live test recipe
 
 Test a host end to end through Herdr, with the Speaker running on Local:

@@ -42,6 +42,10 @@ else:
     import fcntl
 
 HERDR = os.environ.get("HERDR_BIN_PATH") or shutil.which("herdr") or "herdr"
+# The Herdr desktop app's terminals run in herdr-core. A Speaker started from
+# Finder may lack ~/.local/bin on PATH, where hc's installer puts it.
+_HC_HOME = os.path.expanduser(os.path.join("~", ".local", "bin", "hc"))
+HC = shutil.which("hc") or (_HC_HOME if os.path.exists(_HC_HOME) else None)
 CONFIG_DIR = os.environ.get("HERDR_PLUGIN_CONFIG_DIR", os.path.expanduser("~/.config/herdr-speak"))
 STATE_DIR = os.environ.get("HERDR_PLUGIN_STATE_DIR", CONFIG_DIR)
 LOCK_PATH = os.path.join(STATE_DIR, "speaker.lock")
@@ -110,6 +114,15 @@ def load_config():
 
 def herdr(args, machine=None):
     cmd = [HERDR] + (["--machine", machine] if machine else []) + args
+    return call(cmd, remove_ssh_dirs if machine else None)
+
+
+def hc(args):
+    """Run herdr-core, which runs the Herdr app's terminals on every machine."""
+    return call([HC] + args) if HC else None
+
+
+def call(cmd, cleanup=None):
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -125,8 +138,8 @@ def herdr(args, machine=None):
         proc.communicate()
         out = None
     finally:
-        if machine:
-            remove_ssh_dirs(proc.pid)
+        if cleanup:
+            cleanup(proc.pid)
     return out if proc.returncode == 0 else None
 
 
@@ -237,6 +250,40 @@ def list_machines(cfg):
         if isinstance(mid, str) and "label" in d and d.get("enabled", True):
             found[mid] = d.get("label") or mid
     return found
+
+
+def hc_agents(listing):
+    """Return {address: (status, turn, machine, where)} from `hc ls --json`.
+
+    Only terminals whose program reports a status (agents) are kept. A remote
+    address is "<machine>/t3"; machine is None for this computer. turn counts
+    finished turns; 0 becomes None, which classify reads as "never finished",
+    like a Herdr pane without completion_seq. where is "<space> / <tab>".
+    """
+    agents = {}
+    for t in (listing or {}).get("terminals") or []:
+        # Only "status" (a string in ls, {app, state} in get): every terminal has
+        # a "state" (live or finished), which status_of would take for one.
+        address, st = t.get("address"), status_of({"status": t.get("status")})
+        if not isinstance(address, str) or not st:
+            continue
+        turn = t.get("turn")
+        machine = address.split("/")[0] if "/" in address else None
+        agents[address] = (
+            st,
+            turn if isinstance(turn, int) and turn > 0 else None,
+            machine,
+            t.get("where") or "",
+        )
+    return agents
+
+
+def hc_name(machine, where, parts):
+    """Spoken name for an hc terminal, like source_name: space for "workspace".
+    An unnamed tab shows as its number, which isn't worth saying."""
+    space, _, tab = where.partition(" / ")
+    named = {"machine": machine, "workspace": space, "tab": "" if tab.isdigit() else tab}
+    return ", ".join(named[p] for p in parts if named.get(p))
 
 
 def in_builtin_recap(lines, i):
@@ -569,6 +616,42 @@ def main():
     machines, refreshed = {}, 0.0
     watched = set()  # machines with a watch_keys thread
 
+    def handle(event, key, label, read, name, mark=None):
+        """Speak one event. read() returns the pane's recent text; name(parts)
+        its spoken name; mark(fresh) sets its sidebar token, where there is one."""
+        nonlocal last_source
+        live = load_config()  # re-read so voice/rate/announce edits apply live
+        parts = live.get("announce") or []
+        if event == "blocked":
+            if live.get("alert_blocked"):
+                # No recap to read: the agent stopped to ask. Always name it.
+                who = name(parts) or "An agent"
+                last_source = key
+                log(f"[{label}] {who} needs you.")
+                speak(f"{who} needs you.", live)
+            return
+        out = read()
+        if ends_with_builtin_recap(out):
+            return  # Claude Code summarized the session; nothing new to say
+        recap = extract_recap(out)
+        h = hashlib.sha1(recap.encode()).hexdigest() if recap else None
+        # An old recap still in the scrollback means this turn had none.
+        fresh = h is not None and last_spoken.get(key) != h
+        if mark and marked.get(key) != fresh:
+            marked[key] = fresh
+            mark(fresh)
+        if not fresh:
+            return
+        last_spoken[key] = h
+        if key != last_source:
+            # Name the source only when it changes, so one agent stays quiet.
+            who = name(parts)
+            if who:
+                recap = f"{who}. {recap}"
+        last_source = key
+        log(f"[{label}] {MARKER} {recap}")
+        speak(recap, live)
+
     while True:
         if time.time() - refreshed > MACHINE_REFRESH_SECONDS:
             new = list_machines(cfg)
@@ -591,43 +674,40 @@ def main():
             for pane, (st, seq) in find_agents(data).items():
                 key = (machine, pane)
                 event, last_seen[key] = classify(last_seen.get(key), st, seq, first_listing)
-                if event == "blocked":
-                    live = load_config()
-                    if live.get("alert_blocked"):
-                        # No recap to read: the agent stopped to ask. Always name it.
-                        name = (
-                            source_name(data, pane, machine, label, live.get("announce") or []) or "An agent"
-                        )
-                        last_source = key
-                        log(f"[{label} {pane}] {name} needs you.")
-                        speak(f"{name} needs you.", live)
-                    continue
-                if event == "finished":
-                    out = herdr(
-                        ["agent", "read", pane, "--source", "recent-unwrapped", "--lines", READ_LINES],
-                        machine,
+                if event:
+                    handle(
+                        event,
+                        key,
+                        f"{label} {pane}",
+                        lambda p=pane, m=machine: herdr(
+                            ["agent", "read", p, "--source", "recent-unwrapped", "--lines", READ_LINES], m
+                        ),
+                        lambda parts, p=pane, m=machine, lb=label, d=data: source_name(d, p, m, lb, parts),
+                        lambda fresh, p=pane, m=machine: mark_pane(p, m, fresh),
                     )
-                    if ends_with_builtin_recap(out):
-                        continue  # Claude Code summarized the session; nothing new to say
-                    recap = extract_recap(out)
-                    h = hashlib.sha1(recap.encode()).hexdigest() if recap else None
-                    # An old recap still in the scrollback means this turn had none.
-                    fresh = h is not None and last_spoken.get(key) != h
-                    if marked.get(key) != fresh:
-                        marked[key] = fresh
-                        mark_pane(pane, machine, fresh)
-                    if not fresh:
-                        continue
-                    last_spoken[key] = h
-                    live = load_config()  # re-read so voice/rate/announce edits apply live
-                    if key != last_source:
-                        # Name the source only when it changes, so one agent stays quiet.
-                        name = source_name(data, pane, machine, label, live.get("announce") or [])
-                        if name:
-                            recap = f"{name}. {recap}"
-                    last_source = key
-                    log(f"[{label} {pane}] {MARKER} {recap}")
-                    speak(recap, live)
+
+        # The Herdr app's terminals, on every machine, in one listing.
+        listing = parse_json(hc(["ls", "--json"]))
+        for address, (st, seq, machine, where) in hc_agents(listing).items():
+            key = ("hc", address)
+            # Baseline each machine once, the first time its terminals show up.
+            first_listing = ("hc", machine) not in baselined
+            event, last_seen[key] = classify(last_seen.get(key), st, seq, first_listing)
+            if event:
+                handle(
+                    event,
+                    key,
+                    f"app {address}",
+                    lambda a=address: hc(["read", a, "--lines", READ_LINES]),
+                    lambda parts, m=machine, w=where: hc_name(m, w, parts),
+                )
+        if listing is not None:
+            # A machine counts as listed once it is connected, even with no agents
+            # yet, so an agent started on it later isn't mistaken for old news.
+            connected = [
+                m.get("name") for m in listing.get("machines") or [] if m.get("state") == "connected"
+            ]
+            baselined.update(("hc", m) for m in [None, *connected])
 
         nap(float(cfg.get("poll_seconds", 2)))
 

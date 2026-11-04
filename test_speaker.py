@@ -130,6 +130,40 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class HcAgents(unittest.TestCase):
+    # `hc ls --json` from herdr-core 0.1.18, trimmed.
+    LISTING = {
+        "machines": [{"name": "mbpm5", "state": "connected"}],
+        "terminals": [
+            {"address": "t1", "agent": "claude-code", "status": "done", "turn": 2, "where": "api / review"},
+            {"address": "mbpm5/t4", "agent": "codex", "status": "working", "turn": 0, "where": "~ / 1"},
+            {"address": "t2", "agent": "zsh", "state": "live", "turn": 0, "where": "api / 2"},
+        ],
+    }
+
+    def test_keeps_agents_with_machine_and_turn(self):
+        self.assertEqual(
+            speaker.hc_agents(self.LISTING),
+            {
+                "t1": ("done", 2, None, "api / review"),
+                # turn 0 means no finished turn yet, like a missing completion_seq.
+                "mbpm5/t4": ("working", None, "mbpm5", "~ / 1"),
+            },
+        )
+
+    def test_garbage(self):
+        self.assertEqual(speaker.hc_agents(None), {})
+        self.assertEqual(speaker.hc_agents({"terminals": [{"address": 7, "status": "done"}]}), {})
+
+    def test_name_parts(self):
+        parts = ["machine", "workspace", "tab"]
+        self.assertEqual(speaker.hc_name("mbpm5", "api / review", parts), "mbpm5, api, review")
+        self.assertEqual(speaker.hc_name(None, "api / review", parts), "api, review")
+
+    def test_name_skips_numbered_tab(self):
+        self.assertEqual(speaker.hc_name(None, "api / 3", ["workspace", "tab"]), "api")
+
+
 class Classify(unittest.TestCase):
     def test_baseline_is_silent(self):
         self.assertEqual(speaker.classify(None, "done", 4, baseline=True), (None, ("done", 4)))
