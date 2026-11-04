@@ -98,6 +98,33 @@ description = "mute speaker"
 
 On a Windows machine, write the variables as `%HERDR_BIN_PATH%` and `%HERDR_ACTIVE_WORKSPACE_ID%`.
 
+### Herdr desktop app
+
+The Speaker also speaks agents in the [Herdr desktop app](https://github.com/herdrdev/herdr-app), on this computer and on every machine the app connects to. It finds them through herdr-core (`hc`), which the app installs. The app mod in `mods/herdr-speak` starts the Speaker, shows 🔊 or 🔇, and takes mute and skip keys. It runs on macOS and Linux.
+
+1. Clone this repository, then link the mod into the app:
+
+   ```sh
+   git clone https://github.com/jjeff/herdr-speak ~/.herdr-speak
+   ln -s ~/.herdr-speak/mods/herdr-speak ~/.config/herdr-app/mods/herdr-speak
+   ```
+
+2. Show the mod in a layout. The app's own layouts are read-only, so duplicate one (`herdr-app do layout.clone '{"name":"main","as":"main-speak"}'`) and give the mod a block in the copy. For example, replace the copy's `status` block with a row:
+
+   ```json
+   { "id": "status-row", "type": "row", "size": { "px": 28 }, "children": [
+     { "id": "status", "type": "block", "content": { "mod": "workspace-status" } },
+     { "id": "speak", "type": "block", "content": { "mod": "herdr-speak" }, "size": { "px": 110 } } ] }
+   ```
+
+3. Bind keys in `~/.config/herdr-app/keys.json` if you want them. Click the indicator to mute without a key.
+
+   ```json
+   "global": { "cmd-shift-m": "herdr-speak.mute", "cmd-shift-k": "herdr-speak.skip" }
+   ```
+
+The mod uses the Herdr plugin's config and state folders, so with both installed there is still one Speaker and one mute switch.
+
 ## Use
 
 In any agent session, run the toggle from the table above (in Claude Code its full name is `/herdr-speak:speak`). You should hear "Speech mode on." Add `off` to stop.
